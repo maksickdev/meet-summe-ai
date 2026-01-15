@@ -54,6 +54,11 @@ export default function App() {
     return joinPaths(storageDir, selected.audio.relative_path);
   }, [selected, storageDir]);
 
+  const selectedAbsSystemAudioPath = useMemo(() => {
+    if (!selected || !selected.system_audio) return "";
+    return joinPaths(storageDir, selected.system_audio.relative_path);
+  }, [selected, storageDir]);
+
   async function refreshRecordings() {
     const list = await listRecordings();
     setRecordings(list);
@@ -334,13 +339,29 @@ export default function App() {
               <div className="space-y-1 text-sm">
                 <div className="font-mono">{selected.id}</div>
                 <div className="text-xs text-zinc-600 dark:text-zinc-400">Created: {selected.created_at}</div>
-                <div className="text-xs text-zinc-600 dark:text-zinc-400">Audio: {selected.audio.relative_path}</div>
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">Audio (Mic): {selected.audio.relative_path}</div>
+                {selected.system_audio && (
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Audio (System): {selected.system_audio.relative_path}</div>
+                )}
                 <div className="text-xs text-zinc-600 dark:text-zinc-400">
                   Duration: {selected.audio.duration_ms ? `${Math.round(selected.audio.duration_ms / 1000)}s` : "—"}
                 </div>
               </div>
 
-              {selectedAbsAudioPath ? <AudioPlayer absolutePath={selectedAbsAudioPath} /> : null}
+              <div className="space-y-4">
+                {selectedAbsAudioPath ? (
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-zinc-500">Microphone</div>
+                    <AudioPlayer absolutePath={selectedAbsAudioPath} />
+                  </div>
+                ) : null}
+                {selectedAbsSystemAudioPath ? (
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-zinc-500">System Audio</div>
+                    <AudioPlayer absolutePath={selectedAbsSystemAudioPath} />
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div className="mt-4 space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">

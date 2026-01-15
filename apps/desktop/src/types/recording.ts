@@ -11,5 +11,6 @@ export type RecordingMetadata = {
   created_at: string;
   title: string | null;
   audio: RecordingAudioInfo;
+  system_audio?: RecordingAudioInfo | null;
   markdown_relative_path: string | null;
 };

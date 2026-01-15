@@ -19,7 +19,8 @@ pub struct RecordingMetadata {
     pub id: String,
     pub created_at: DateTime<Utc>,
     pub title: Option<String>,
-    pub audio: RecordingAudioInfo,
+    pub audio: RecordingAudioInfo,               // Microphone audio (primary)
+    pub system_audio: Option<RecordingAudioInfo>, // System audio (optional)
     pub markdown_relative_path: Option<String>,
 }
 
@@ -55,7 +56,8 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
     let uuid = Uuid::new_v4();
     let id = format!("{}_{}", created_at.format("%Y-%m-%dT%H-%M-%SZ"), uuid);
 
-    let audio_relative_path = format!("recordings/{id}/audio.wav");
+    let audio_relative_path = format!("recordings/{id}/mic.wav");
+    let system_audio_relative_path = format!("recordings/{id}/system.wav");
     let markdown_relative_path = Some(format!("recordings/{id}/notes.md"));
 
     let meta = RecordingMetadata {
@@ -69,6 +71,13 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
             sample_rate: 48_000,
             channels: 2,
         },
+        system_audio: Some(RecordingAudioInfo {
+            relative_path: system_audio_relative_path,
+            duration_ms: None,
+            format: "wav".to_string(),
+            sample_rate: 48_000,
+            channels: 2,
+        }),
         markdown_relative_path,
     };
 

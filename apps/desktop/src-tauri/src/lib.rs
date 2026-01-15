@@ -162,8 +162,14 @@ fn start_recording(
 
     let meta = storage::create_new_recording(&app)?;
     let audio_path = storage::abs_path(&app, &meta.audio.relative_path)?;
+    let system_audio_path = meta
+        .system_audio
+        .as_ref()
+        .map(|s| storage::abs_path(&app, &s.relative_path))
+        .transpose()?;
 
-    let session = audio::recorder::RecordingSession::start(audio_path, mic_device_name)?;
+    let session =
+        audio::recorder::RecordingSession::start(audio_path, system_audio_path, mic_device_name)?;
     *guard = Some(ActiveRecording {
         session,
         meta: meta.clone(),
@@ -206,6 +212,12 @@ fn stop_recording(
     meta.audio.duration_ms = Some(result.duration_ms);
     meta.audio.sample_rate = result.sample_rate;
     meta.audio.channels = result.channels;
+
+    if let Some(sys) = &mut meta.system_audio {
+        sys.duration_ms = Some(result.duration_ms);
+        sys.sample_rate = result.sample_rate;
+        sys.channels = result.channels;
+    }
 
     storage::save_recording_metadata(&app, &meta)?;
     Ok(meta)

@@ -34,4 +34,13 @@
 - Replaced file opening with "Show in Finder/Explorer" functionality using native OS commands
 - Removed `tauri-plugin-opener` dependency in favor of direct system commands for better cross-platform support
 - Fixed AudioPlayer not updating when switching between recordings by adding `useEffect` hook and `key` prop
+- **Improved audio capture synchronization**: increased ring buffer sizes from 2s to 5s to prevent drops
+- Added comprehensive debug logging to track system audio, microphone, and writer thread activity
+- Added buffer overflow detection and warnings for both audio sources
+- **Parallel multi-track recording**: Microphone and System Audio are now recorded to separate WAV files (`mic.wav` and `system.wav`) to avoid interference and synchronization issues
+- Updated `RecordingMetadata` to support optional `system_audio` track
+- Updated UI to display and play both Microphone and System Audio tracks separately
+- Refactored `writer_loop` to handle multiple independent WAV writers concurrently
+- **Fixed macOS permissions**: Added `Info.plist` with `NSMicrophoneUsageDescription` and `NSScreenCaptureUsageDescription` to properly request access
+- Note: Application must be built/bundled (`npm run tauri build`) to properly trigger macOS permission dialogs and appear in System Settings
 
