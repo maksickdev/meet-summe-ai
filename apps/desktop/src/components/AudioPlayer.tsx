@@ -19,7 +19,7 @@ export function AudioPlayer({ absolutePath }: AudioPlayerProps) {
     <div className="space-y-2">
       <div className="text-xs text-zinc-600 dark:text-zinc-400">Player</div>
       <audio ref={audioRef} controls className="w-full" key={absolutePath}>
-        <source src={src} type="audio/wav" />
+        <source src={src} />
       </audio>
     </div>
   );

@@ -41,6 +41,8 @@
 - Updated `RecordingMetadata` to support optional `system_audio` track
 - Updated UI to display and play both Microphone and System Audio tracks separately
 - Refactored `writer_loop` to handle multiple independent WAV writers concurrently
+- **Replaced WAV with MP3 encoding**: Switched to `mp3lame-encoder` to reduce file size (~10x smaller)
+- Implemented `Mp3StereoWriter` for efficient real-time MP3 encoding (192kbps)
 - **Fixed macOS permissions**: Added `Info.plist` with `NSMicrophoneUsageDescription` and `NSScreenCaptureUsageDescription` to properly request access
 - Note: Application must be built/bundled (`npm run tauri build`) to properly trigger macOS permission dialogs and appear in System Settings
 

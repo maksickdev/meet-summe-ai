@@ -8,7 +8,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::traits::{Consumer, Producer, Split};
 
 use crate::audio::device;
-use crate::audio::writer::WavStereoWriter;
+use crate::audio::writer::Mp3StereoWriter;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RecordingResult {
@@ -463,9 +463,9 @@ fn writer_loop(
     paused_accum_ms: Arc<Mutex<u64>>,
     pause_started_at: Arc<Mutex<Option<Instant>>>,
 ) -> Result<(), String> {
-    let mut mic_writer = WavStereoWriter::create(&mic_path, sample_rate)?;
+    let mut mic_writer = Mp3StereoWriter::create(&mic_path, sample_rate)?;
     let mut sys_writer = if let Some(p) = &sys_path {
-        Some(WavStereoWriter::create(p, sample_rate)?)
+        Some(Mp3StereoWriter::create(p, sample_rate)?)
     } else {
         None
     };
