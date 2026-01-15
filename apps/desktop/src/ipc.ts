@@ -1,0 +1,74 @@
+import { invoke } from "@tauri-apps/api/core";
+
+import type { RecordingMetadata } from "./types/recording";
+
+export async function greet(name: string): Promise<string> {
+  return await invoke<string>("greet", { name });
+}
+
+export async function getStorageDir(): Promise<string> {
+  return await invoke<string>("get_storage_dir");
+}
+
+export async function setStorageDir(path: string): Promise<void> {
+  await invoke<void>("set_storage_dir", { path });
+}
+
+export async function listRecordings(): Promise<RecordingMetadata[]> {
+  return await invoke<RecordingMetadata[]>("list_recordings");
+}
+
+export async function getRecording(recordingId: string): Promise<RecordingMetadata> {
+  return await invoke<RecordingMetadata>("get_recording", { recordingId });
+}
+
+export async function deleteRecording(recordingId: string): Promise<void> {
+  await invoke<void>("delete_recording", { recordingId });
+}
+
+export async function listInputDevices(): Promise<string[]> {
+  return await invoke<string[]>("list_input_devices");
+}
+
+export async function hasGeminiApiKey(): Promise<boolean> {
+  return await invoke<boolean>("has_gemini_api_key");
+}
+
+export async function getGeminiApiKey(): Promise<string> {
+  return await invoke<string>("get_gemini_api_key");
+}
+
+export async function setGeminiApiKey(apiKey: string): Promise<void> {
+  await invoke<void>("set_gemini_api_key", { apiKey });
+}
+
+export async function clearGeminiApiKey(): Promise<void> {
+  await invoke<void>("clear_gemini_api_key");
+}
+
+export async function startRecording(micDeviceName: string | null): Promise<RecordingMetadata> {
+  return await invoke<RecordingMetadata>("start_recording", { micDeviceName });
+}
+
+export async function pauseRecording(): Promise<void> {
+  await invoke<void>("pause_recording");
+}
+
+export async function resumeRecording(): Promise<void> {
+  await invoke<void>("resume_recording");
+}
+
+export async function stopRecording(): Promise<RecordingMetadata> {
+  return await invoke<RecordingMetadata>("stop_recording");
+}
+
+export async function summarizeRecording(
+  recordingId: string,
+  templateId: string,
+): Promise<RecordingMetadata> {
+  return await invoke<RecordingMetadata>("summarize_recording", { recordingId, templateId });
+}
+
+export async function showInFolder(path: string): Promise<void> {
+  await invoke<void>("show_in_folder", { path });
+}

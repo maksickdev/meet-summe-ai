@@ -26,11 +26,33 @@ SumMe is a lightweight, privacy-oriented, cross-platform desktop application tha
 - **Frontend**: React 19 + TypeScript + Vite
 - **UI**: shadcn/ui + Radix UI + Tailwind CSS
 - **Markdown rendering**: `react-markdown` + `remark-gfm` + `rehype-highlight`
-- **Audio capture (Rust)**: `cpal` + `ringbuf`
+- **Audio capture (Rust)**:
+  - Microphone: `cpal`
+  - System output (native): `qruhear` (uses `screencapturekit` on macOS, `cpal` on Windows/Linux)
+  - Buffering: `ringbuf`
+  - WAV writing: `hound`
 - **Gemini integration**: Rust (`reqwest`) or Node (`@google/generative-ai`) via IPC (decision recorded below)
 - **Local storage**: filesystem + JSON metadata, optionally `tauri-plugin-store`
 - **Hotkeys**: `tauri-plugin-global-shortcut`
 - **Tray + notifications**: Tauri tray + notifications
+
+## Repository layout (current)
+
+Implementation lives under `apps/desktop`:
+
+```text
+.
+├─ apps/
+│  └─ desktop/                 # Tauri app (Rust + React)
+│     ├─ src/                  # React UI
+│     └─ src-tauri/            # Rust backend
+├─ packages/
+│  └─ prompts/                 # Prompt templates and versions
+└─ docs/
+   ├─ prd.md
+   ├─ project.md
+   └─ changelog.md
+```
 
 ## Architecture overview
 
@@ -188,7 +210,8 @@ Each template should define:
 - Data is stored locally by default.
 - Summarization requires a user-provided Gemini API key.
 - API keys must never be logged.
-- API keys should be stored using the most secure OS mechanism available (implementation-dependent).
+- **MVP implementation**: API keys are stored in `settings.json` as plain text for simplicity and reliability.
+  - Future: Consider encryption or OS keychain for production release.
 - Telemetry is off by default (MVP: none).
 - Clearly communicate that summarization sends data to Gemini.
 
@@ -210,4 +233,37 @@ Each template should define:
 - **MVP**: recording + summarize + markdown output + tray/hotkeys
 - **1.0**: quality presets, language selection, templates UI, export integrations, theming, notifications
 - **Post-1.0**: search, tags/projects, cloud mode, team features, calendar integrations, mobile
+
+## Technical improvements (2026-01-14)
+
+### Audio quality standardization
+- **Problem**: Audio recordings had artifacts (slow playback, distortion) due to sample rate mismatch between system audio (via `qruhear`) and microphone (via `cpal`).
+- **Solution**: Standardized both sources to 48kHz fixed sample rate. This ensures consistent timing and clean mixing when writing stereo WAV files.
+- **Implementation**: Removed dynamic sample rate detection; both capture threads now use `SAMPLE_RATE = 48_000`.
+
+### Audio playback in UI
+- **Problem**: Recorded audio files were not playing back in the browser-based audio player component.
+- **Solution**: Enabled Tauri's `protocol-asset` feature and configured `assetProtocol` security in `tauri.conf.json` to allow the frontend to access audio files via `convertFileSrc()`.
+- **Implementation**: Added `protocol-asset` to `tauri` dependency features and configured asset protocol scope to allow all paths (`["**"]`).
+
+### API key storage migration
+- **Problem**: OS keychain integration (`keyring` crate) was unreliable during development, preventing API key storage and retrieval.
+- **Solution**: Migrated to local storage in `settings.json` for MVP. API key is now stored as plain text alongside other app settings.
+- **Implementation**: 
+  - Removed `keyring` dependency and `secrets.rs` module
+  - Added `gemini_api_key: Option<String>` to `Settings` struct in `storage/mod.rs`
+  - Created helper functions: `get_gemini_api_key()`, `set_gemini_api_key()`, `has_gemini_api_key()`, `clear_gemini_api_key()`
+  - Updated UI to display and edit the key directly (visible in text input)
+- **Note**: For production, consider encrypting the key or using OS-specific secure storage.
+
+### File operations improvement
+- **Problem**: Tauri security model prevented direct file opening via `tauri-plugin-opener` due to path restrictions.
+- **Solution**: Implemented native "Show in Finder/Explorer" functionality using OS-specific commands.
+- **Implementation**:
+  - Created `show_in_folder()` command that uses platform-specific commands:
+    - macOS: `open -R <path>` (reveals file in Finder)
+    - Windows: `explorer /select,<path>` (shows file in Explorer)
+    - Linux: `xdg-open <parent_dir>` (opens parent folder)
+  - Removed `tauri-plugin-opener` and `tauri-plugin-shell` dependencies
+  - Updated UI button from "Open file" to "Show in Finder" for clarity
 

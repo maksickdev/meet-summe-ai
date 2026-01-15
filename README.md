@@ -2,7 +2,9 @@
 
 Private, cross-platform desktop app to **record system audio + microphone** and generate **high-quality transcripts and summaries** using **Google Gemini**, exported as beautiful **Markdown**.
 
-> Status: documentation/bootstrap stage (no implementation yet).
+> **Status**: MVP core functionality implemented. Native Rust audio capture (system + microphone) with 48kHz standardized quality, file-based storage, React UI with playback, and Gemini API integration ready.
+>
+> **Known issues fixed**: Audio quality artifacts resolved by standardizing sample rates. Audio playback now works correctly via Tauri asset protocol.
 
 ## What it does (MVP)
 
@@ -21,7 +23,7 @@ Private, cross-platform desktop app to **record system audio + microphone** and 
 - **Frontend**: React 19 + TypeScript + Vite
 - **UI**: shadcn/ui + Radix UI + Tailwind CSS
 - **Markdown**: `react-markdown` + `remark-gfm` + `rehype-highlight`
-- **Audio capture (Rust)**: `cpal` + `ringbuf` (encoding approach TBD)
+- **Audio capture (Rust)**: system output via `qruhear` + microphone via `cpal` (buffering via `ringbuf`, WAV via `hound`)
 - **Gemini**: `@google/generative-ai` via IPC or Rust `reqwest` (final choice TBD)
 - **Local storage**: filesystem + metadata JSON, optionally `tauri-plugin-store`
 - **Shortcuts / tray / notifications**: Tauri plugins and built-ins
@@ -40,7 +42,7 @@ Private, cross-platform desktop app to **record system audio + microphone** and 
 
 ## Planned repository structure (preview)
 
-This is the intended layout once implementation starts:
+This is the intended layout as implementation progresses:
 
 ```text
 .
@@ -60,9 +62,25 @@ This is the intended layout once implementation starts:
 
 ## Development (placeholder)
 
-Implementation is not initialized yet. Once the Tauri + Vite app is scaffolded, this section will be updated with:
+Desktop app development happens in `apps/desktop`.
 
-- Prerequisites (Rust toolchain, Node.js, package manager)
-- Local run commands
-- Build/release steps
+### Prerequisites
+
+- Node.js (LTS recommended)
+- Rust toolchain (`rustup`, stable)
+
+### Install dependencies
+
+```bash
+cd apps/desktop
+npm install
+```
+
+### Run (desktop)
+
+```bash
+cd apps/desktop
+npm run tauri dev
+```
+
 
