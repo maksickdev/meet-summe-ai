@@ -223,6 +223,20 @@ fn stop_recording(
     Ok(meta)
 }
 
+#[tauri::command]
+fn read_recording_note(app: tauri::AppHandle, recording_id: String) -> Result<String, String> {
+    storage::read_recording_note(&app, &recording_id)
+}
+
+#[tauri::command]
+fn save_recording_note(
+    app: tauri::AppHandle,
+    recording_id: String,
+    content: String,
+) -> Result<(), String> {
+    storage::save_recording_note(&app, &recording_id, &content)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -244,7 +258,9 @@ pub fn run() {
             start_recording,
             pause_recording,
             resume_recording,
-            stop_recording
+            stop_recording,
+            read_recording_note,
+            save_recording_note
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

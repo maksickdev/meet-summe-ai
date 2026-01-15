@@ -150,6 +150,30 @@ pub fn delete_recording(app: &tauri::AppHandle, id: &str) -> Result<(), String> 
     Ok(())
 }
 
+pub fn read_recording_note(app: &tauri::AppHandle, id: &str) -> Result<String, String> {
+    let meta = load_recording_metadata(app, id)?;
+    let rel_path = meta
+        .markdown_relative_path
+        .ok_or("No markdown note for this recording")?;
+    let path = abs_path(app, &rel_path)?;
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    std::fs::read_to_string(path).map_err(|e| format!("Failed to read note: {e}"))
+}
+
+pub fn save_recording_note(app: &tauri::AppHandle, id: &str, content: &str) -> Result<(), String> {
+    let meta = load_recording_metadata(app, id)?;
+    let rel_path = meta
+        .markdown_relative_path
+        .ok_or("No markdown note for this recording")?;
+    let path = abs_path(app, &rel_path)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create note dir: {e}"))?;
+    }
+    std::fs::write(path, content).map_err(|e| format!("Failed to save note: {e}"))
+}
+
 pub fn abs_path(app: &tauri::AppHandle, relative_path: &str) -> Result<PathBuf, String> {
     Ok(resolve_storage_dir(app)?.join(relative_path))
 }

@@ -17,6 +17,7 @@ import {
   summarizeRecording,
 } from "./ipc";
 import { AudioPlayer } from "./components/AudioPlayer";
+import { MarkdownEditor } from "./components/MarkdownEditor";
 import { RecordingControls } from "./components/RecordingControls";
 import { RecordingsList } from "./components/RecordingsList";
 import type { RecordingMetadata } from "./types/recording";
@@ -393,13 +394,13 @@ export default function App() {
                   {isSummarizing ? "Processing..." : "Summarize"}
                 </button>
               </div>
-              {selected.markdown_relative_path ? (
-                <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                  ✓ Markdown: {selected.markdown_relative_path}
-                </div>
-              ) : (
-                <div className="text-xs text-zinc-600 dark:text-zinc-400">No markdown generated yet</div>
-              )}
+              
+              <div className="mt-4">
+                <MarkdownEditor
+                  recordingId={selected.id}
+                  initialPath={selected.markdown_relative_path || ""}
+                />
+              </div>
             </div>
           </section>
         ) : null}

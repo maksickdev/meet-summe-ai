@@ -69,6 +69,14 @@ export async function summarizeRecording(
   return await invoke<RecordingMetadata>("summarize_recording", { recordingId, templateId });
 }
 
+export async function readRecordingNote(recordingId: string): Promise<string> {
+  return await invoke<string>("read_recording_note", { recordingId });
+}
+
+export async function saveRecordingNote(recordingId: string, content: string): Promise<void> {
+  await invoke<void>("save_recording_note", { recordingId, content });
+}
+
 export async function showInFolder(path: string): Promise<void> {
   await invoke<void>("show_in_folder", { path });
 }
