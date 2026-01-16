@@ -7,7 +7,7 @@ Private, cross-platform desktop app to **record system audio + microphone** and 
 ## Key Features
 
 - **Record Everything**: System audio + Microphone simultaneously.
-- **High Quality**: 48kHz sampling, MP3 encoding (192kbps).
+- **High Quality**: 48kHz sampling, MP3 encoding (64kbps optimized for speech).
 - **Flexible**: Record separate tracks or merge them on the fly.
 - **Background Control**: System Tray icon and Global Hotkey (`Cmd+Shift+R` / `Ctrl+Shift+R`).
 - **AI Powered**: Summarize recordings with Google Gemini using custom templates.

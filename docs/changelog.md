@@ -11,6 +11,7 @@
 - Updated `RecordingMetadata` to include `merged_audio` track info.
 - Added `read_recording_note` and `save_recording_note` commands to backend API.
 - Updated `capabilities` to include `tray:default` and `global-shortcut:default` permissions.
+- **Optimized Audio Storage**: Reduced MP3 bitrate from 192kbps to 64kbps to save disk space (~3x smaller files), which is sufficient for speech.
 
 ### Fixed
 - **UI Synchronization**: Added backend events (`recording-started`, `recording-stopped`) to notify the frontend when recording is toggled via Tray Icon or Global Shortcut.

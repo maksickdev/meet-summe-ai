@@ -25,7 +25,7 @@ impl Mp3StereoWriter {
         let mut builder = Builder::new().expect("Create LAME builder");
         builder.set_num_channels(2).expect("set channels");
         builder.set_sample_rate(sample_rate).expect("set rate");
-        builder.set_brate(Bitrate::Kbps192).expect("set bitrate");
+        builder.set_brate(Bitrate::Kbps64).expect("set bitrate");
         builder.set_quality(Quality::Good).expect("set quality");
 
         let encoder = builder.build().expect("build encoder");
