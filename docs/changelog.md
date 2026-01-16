@@ -4,12 +4,21 @@
 - **Settings Modal**: Moved configuration (Storage, Mic, API Key) to a dedicated `SettingsDialog` using Radix UI primitives.
 - **Modern Components**: Added `Sidebar`, `Header`, `MainContent` components using Tailwind CSS v4 and Lucide icons.
 - **Status Bar**: Added a status indicator in the Sidebar for system feedback.
+- **Context Menu**: Added right-click context menu to recordings in the sidebar with "Rename" and "Delete" options.
+- **Inline Renaming**: Implemented inline renaming of recordings directly in the sidebar.
+- **Delete Confirmation**: Added a `ConfirmDialog` using Radix UI for safe deletion of recordings.
 
 ### Changed
 - Refactored `App.tsx` to orchestrate the new layout components instead of containing all UI logic.
 - Replaced the simple dropdown recording list with a scrollable Sidebar list featuring metadata (duration, date).
 - Redesigned the Header to be a toolbar with recording controls and settings trigger.
 - Improved MainContent area with better spacing and organization for Audio Player and Markdown Editor.
+- Updated `storage/mod.rs` and `lib.rs` (backend) to support `rename_recording` and `delete_recording`.
+- Updated `ipc.ts` (frontend) to expose new backend commands.
+
+### Fixed
+- Fixed audio writer warnings in Rust backend.
+- Fixed a bug where `refreshRecordings` would auto-select the first recording even if one was already selected, due to stale closure variables in `useEffect`. Used `useRef` to track `selectedId` correctly.
 
 ## [2026-01-15] - Markdown Editor, Tray, Shortcuts, Merged Audio
 ### Added

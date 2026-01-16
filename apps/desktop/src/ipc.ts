@@ -26,6 +26,10 @@ export async function deleteRecording(recordingId: string): Promise<void> {
   await invoke<void>("delete_recording", { recordingId });
 }
 
+export async function renameRecording(recordingId: string, newTitle: string): Promise<void> {
+  await invoke<void>("rename_recording", { recordingId, newTitle });
+}
+
 export async function listInputDevices(): Promise<string[]> {
   return await invoke<string[]>("list_input_devices");
 }

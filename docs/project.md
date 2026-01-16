@@ -169,7 +169,7 @@ This keeps data portable and Obsidian-friendly.
 ## UI (MVP screens)
 
 - **Layout**:
-  - **Sidebar (Left)**: Scrollable list of recordings with metadata (date, duration).
+  - **Sidebar (Left)**: Scrollable list of recordings with metadata (date, duration). Supports right-click context menu for Rename/Delete.
   - **Header (Top)**: Global recording controls (Start/Stop/Pause), status indicator, and Settings trigger.
   - **Main Content (Right)**:
     - **Audio Player**: Multi-track playback (Mic, System, Merged).

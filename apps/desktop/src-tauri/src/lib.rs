@@ -151,6 +151,15 @@ fn delete_recording(app: tauri::AppHandle, recording_id: String) -> Result<(), S
 }
 
 #[tauri::command]
+fn rename_recording(
+    app: tauri::AppHandle,
+    recording_id: String,
+    new_title: String,
+) -> Result<(), String> {
+    storage::rename_recording(&app, &recording_id, &new_title)
+}
+
+#[tauri::command]
 fn has_gemini_api_key(app: tauri::AppHandle) -> Result<bool, String> {
     storage::has_gemini_api_key(&app)
 }
@@ -399,6 +408,7 @@ pub fn run() {
             clear_gemini_api_key,
             summarize_recording,
             delete_recording,
+            rename_recording,
             show_in_folder,
             list_input_devices,
             start_recording,

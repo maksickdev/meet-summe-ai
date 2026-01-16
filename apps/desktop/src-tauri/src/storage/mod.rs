@@ -192,6 +192,12 @@ pub fn delete_recording(app: &tauri::AppHandle, id: &str) -> Result<(), String> 
     Ok(())
 }
 
+pub fn rename_recording(app: &tauri::AppHandle, id: &str, new_title: &str) -> Result<(), String> {
+    let mut meta = load_recording_metadata(app, id)?;
+    meta.title = Some(new_title.to_string());
+    save_recording_metadata(app, &meta)
+}
+
 pub fn read_recording_note(app: &tauri::AppHandle, id: &str) -> Result<String, String> {
     let meta = load_recording_metadata(app, id)?;
     let rel_path = meta

@@ -10,6 +10,8 @@ import {
   hasGeminiApiKey,
   listInputDevices,
   listRecordings,
+  deleteRecording,
+  renameRecording,
   pauseRecording,
   resumeRecording,
   setGeminiApiKey,
@@ -29,6 +31,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { MainContent } from "./components/MainContent";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 
 function joinPaths(base: string, relative: string): string {
   const b = base.replace(/\/+$/, "");
@@ -61,6 +64,10 @@ export default function App() {
   const [mergeEnabled, setMergeEnabledState] = useState<boolean>(false);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [recordingToDelete, setRecordingToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // --- Derived State ---
   const selected = useMemo(
@@ -272,6 +279,42 @@ export default function App() {
     }
   }
 
+  async function onDelete(id: string) {
+    setRecordingToDelete(id);
+    setDeleteConfirmOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!recordingToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteRecording(recordingToDelete);
+      if (selectedId === recordingToDelete) {
+        setSelectedId("");
+      }
+      await refreshRecordings();
+      setStatus("Recording deleted.");
+      setDeleteConfirmOpen(false);
+      setRecordingToDelete(null);
+    } catch (e) {
+      console.error(e);
+      setStatus(`Delete error: ${String(e)}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  async function onRename(id: string, newTitle: string) {
+    try {
+      await renameRecording(id, newTitle);
+      await refreshRecordings();
+      setStatus("Recording renamed.");
+    } catch (e) {
+      console.error(e);
+      setStatus(`Rename error: ${String(e)}`);
+    }
+  }
+
   async function onSummarize() {
     if (!selected) return;
     if (!hasKey) {
@@ -305,6 +348,8 @@ export default function App() {
                     recordings={recordings} 
                     selectedId={selectedId} 
                     onSelect={setSelectedId}
+                    onDelete={onDelete}
+                    onRename={onRename}
                     status={status} 
                 />
             }
@@ -352,6 +397,14 @@ export default function App() {
             onApiKeyChange={setApiKey}
             onSaveApiKey={onSaveApiKey}
             onClearApiKey={onClearApiKey}
+        />
+        <ConfirmDialog
+            open={deleteConfirmOpen}
+            onOpenChange={setDeleteConfirmOpen}
+            title="Delete Recording"
+            description="Are you sure you want to delete this recording? This action cannot be undone."
+            onConfirm={confirmDelete}
+            isLoading={isDeleting}
         />
     </>
   );
