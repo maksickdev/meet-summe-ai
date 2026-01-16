@@ -14,6 +14,7 @@ use crate::audio::writer::Mp3StereoWriter;
 pub struct RecordingResult {
     pub audio_path: String,
     pub system_audio_path: Option<String>,
+    pub merged_audio_path: Option<String>,
     pub sample_rate: u32,
     pub channels: u16,
     pub duration_ms: u64,
@@ -28,6 +29,7 @@ pub struct RecordingSession {
     sample_rate: u32,
     audio_path: PathBuf,
     system_audio_path: Option<PathBuf>,
+    merged_audio_path: Option<PathBuf>,
     threads: Vec<JoinHandle<Result<(), String>>>,
 }
 
@@ -35,6 +37,7 @@ impl RecordingSession {
     pub fn start(
         audio_path: PathBuf,
         system_audio_path: Option<PathBuf>,
+        merged_audio_path: Option<PathBuf>,
         mic_device_name: Option<String>,
     ) -> Result<Self, String> {
         // Fixed sample rate for consistent audio quality
@@ -60,12 +63,14 @@ impl RecordingSession {
             let stop = Arc::clone(&stop);
             let audio_path = audio_path.clone();
             let system_audio_path = system_audio_path.clone();
+            let merged_audio_path = merged_audio_path.clone();
             let paused_accum_ms = Arc::clone(&paused_accum_ms);
             let pause_started_at = Arc::clone(&pause_started_at);
             std::thread::spawn(move || {
                 writer_loop(
                     audio_path,
                     system_audio_path,
+                    merged_audio_path,
                     sample_rate,
                     cons_system,
                     cons_mic,
@@ -106,6 +111,7 @@ impl RecordingSession {
             sample_rate,
             audio_path,
             system_audio_path,
+            merged_audio_path,
             threads,
         })
     }
@@ -158,6 +164,9 @@ impl RecordingSession {
             audio_path: self.audio_path.to_string_lossy().to_string(),
             system_audio_path: self
                 .system_audio_path
+                .map(|p| p.to_string_lossy().to_string()),
+            merged_audio_path: self
+                .merged_audio_path
                 .map(|p| p.to_string_lossy().to_string()),
             sample_rate: self.sample_rate,
             channels: 2,
@@ -455,6 +464,7 @@ fn select_mic_config(
 fn writer_loop(
     mic_path: PathBuf,
     sys_path: Option<PathBuf>,
+    merged_path: Option<PathBuf>,
     sample_rate: u32,
     mut cons_system: impl Consumer<Item = f32>,
     mut cons_mic: impl Consumer<Item = f32>,
@@ -469,51 +479,89 @@ fn writer_loop(
     } else {
         None
     };
+    let mut merged_writer = if let Some(p) = &merged_path {
+        Some(Mp3StereoWriter::create(p, sample_rate)?)
+    } else {
+        None
+    };
 
     eprintln!("[Writer] Mic path: {}", mic_path.display());
     if let Some(p) = &sys_path {
         eprintln!("[Writer] System path: {}", p.display());
+    }
+    if let Some(p) = &merged_path {
+        eprintln!("[Writer] Merged path: {}", p.display());
     }
 
     let mut total_frames = 0u64;
     let mut system_samples = 0u64;
     let mut mic_samples = 0u64;
 
+    let mut mic_buf = Vec::with_capacity(2048);
+    let mut sys_buf = Vec::with_capacity(2048);
+
     while !stop.load(Ordering::SeqCst) {
         if paused.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(20));
             continue;
         }
-        let mut wrote = 0usize;
+
+        mic_buf.clear();
+        sys_buf.clear();
+
+        // Read up to 2048 samples from mic
         for _ in 0..2048 {
-            let system = cons_system.try_pop();
-            let mic = cons_mic.try_pop();
-
-            if let Some(s) = system {
-                system_samples += 1;
-                if let Some(w) = &mut sys_writer {
-                    // Write mono to both channels for now (or make separate Mono writer)
-                    // Reusing WavStereoWriter for simplicity -> Left=System, Right=System
-                    let _ = w.write_frame(s, s);
-                }
-            }
-            
-            if let Some(m) = mic {
-                mic_samples += 1;
-                // Write mono to both channels
-                let _ = mic_writer.write_frame(m, m);
-            }
-
-            if system.is_some() || mic.is_some() {
-                wrote += 1;
-                total_frames += 1;
+            if let Some(s) = cons_mic.try_pop() {
+                mic_buf.push(s);
             } else {
                 break;
             }
         }
-        if wrote == 0 {
-            std::thread::sleep(Duration::from_millis(5));
+
+        // Read up to 2048 samples from system
+        for _ in 0..2048 {
+            if let Some(s) = cons_system.try_pop() {
+                sys_buf.push(s);
+            } else {
+                break;
+            }
         }
+
+        let max_len = mic_buf.len().max(sys_buf.len());
+
+        if max_len == 0 {
+             std::thread::sleep(Duration::from_millis(5));
+             continue;
+        }
+
+        for i in 0..max_len {
+            let m = mic_buf.get(i).copied();
+            let s = sys_buf.get(i).copied();
+
+            if let Some(val) = m {
+                mic_writer.write_frame(val, val)?;
+                mic_samples += 1;
+            }
+
+            if let Some(w) = &mut sys_writer {
+                if let Some(val) = s {
+                    w.write_frame(val, val)?;
+                    system_samples += 1;
+                }
+            }
+
+            if let Some(w) = &mut merged_writer {
+                let m_val = m.unwrap_or(0.0);
+                let s_val = s.unwrap_or(0.0);
+                // Mix sum with hard clamping to [-1.0, 1.0].
+                // This avoids 50% volume drop when only one source is active,
+                // while preventing numerical overflow before encoding.
+                let mixed = (m_val + s_val).max(-1.0).min(1.0);
+                w.write_frame(mixed, mixed)?;
+            }
+        }
+        
+        total_frames += max_len as u64;
     }
 
     eprintln!(
@@ -534,6 +582,9 @@ fn writer_loop(
 
     mic_writer.finalize()?;
     if let Some(w) = sys_writer {
+        w.finalize()?;
+    }
+    if let Some(w) = merged_writer {
         w.finalize()?;
     }
     Ok(())

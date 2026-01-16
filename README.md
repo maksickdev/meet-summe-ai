@@ -2,37 +2,25 @@
 
 Private, cross-platform desktop app to **record system audio + microphone** and generate **high-quality transcripts and summaries** using **Google Gemini**, exported as beautiful **Markdown**.
 
-> **Status**: MVP core functionality implemented. Native Rust audio capture (system + microphone) with 48kHz standardized quality, file-based storage, React UI with playback, and Gemini API integration ready.
->
-> **Known issues fixed**: Audio quality artifacts resolved by standardizing sample rates. Audio playback now works correctly via Tauri asset protocol.
+> **Status**: MVP complete. Features: Native Rust audio capture (System + Mic) with MP3 encoding, real-time merging, Tray icon & Global shortcuts, Markdown preview & editor, Gemini summarization.
 
-## What it does (MVP)
+## Key Features
 
-- Record **system audio + microphone** simultaneously (loopback)
-- Pause / resume / stop
-- Save audio as `.m4a` / `.wav` / `.mp3` (final format TBD)
-- One click: **“Summarize with Gemini”** → transcript + summary + action items
-- Enter and use a personal **Gemini API key** (required for summarization)
-- Auto-save results to Markdown (timestamps, speaker labels when available)
-- Runs in background: **tray icon**, global hotkeys, close-to-tray behavior
-- Simple UI: list of recordings, player, summarize button
+- **Record Everything**: System audio + Microphone simultaneously.
+- **High Quality**: 48kHz sampling, MP3 encoding (192kbps).
+- **Flexible**: Record separate tracks or merge them on the fly.
+- **Background Control**: System Tray icon and Global Hotkey (`Cmd+Shift+R` / `Ctrl+Shift+R`).
+- **AI Powered**: Summarize recordings with Google Gemini using custom templates.
+- **Notes**: Read and edit generated Markdown notes directly in the app.
+- **Privacy First**: All data stored locally. API keys stored in local settings.
 
-## Tech stack (target)
+## Tech Stack
 
 - **Desktop**: Tauri 2.x (Rust backend)
-- **Frontend**: React 19 + TypeScript + Vite
-- **UI**: shadcn/ui + Radix UI + Tailwind CSS
-- **Markdown**: `react-markdown` + `remark-gfm` + `rehype-highlight`
-- **Audio capture (Rust)**: system output via `qruhear` + microphone via `cpal` (buffering via `ringbuf`, WAV via `hound`)
-- **Gemini**: `@google/generative-ai` via IPC or Rust `reqwest` (final choice TBD)
-- **Local storage**: filesystem + metadata JSON, optionally `tauri-plugin-store`
-- **Shortcuts / tray / notifications**: Tauri plugins and built-ins
-
-## Privacy & data
-
-- The app is designed to store recordings and notes **locally**.
-- When summarizing, audio (or extracted transcript) is sent to **Gemini** according to the selected integration approach.
-- Future roadmap may include optional cloud backup and SaaS features.
+- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS
+- **Audio**: `cpal` + `qruhear` (capture), `ringbuf` (buffer), `mp3lame-encoder` (MP3 encoding)
+- **AI**: Google Gemini API (via Rust `reqwest`)
+- **OS Integration**: Tray menu, Global shortcuts, File system access
 
 ## Documentation
 
@@ -40,27 +28,7 @@ Private, cross-platform desktop app to **record system audio + microphone** and 
 - Architecture & decisions: `docs/project.md`
 - Change log: `docs/changelog.md`
 
-## Planned repository structure (preview)
-
-This is the intended layout as implementation progresses:
-
-```text
-.
-├─ apps/
-│  └─ desktop/                 # Tauri app (Rust + React)
-│     ├─ src/                  # React UI
-│     └─ src-tauri/            # Rust backend
-├─ packages/
-│  ├─ shared/                  # Shared types/utilities
-│  └─ prompts/                 # Prompt templates and versions
-├─ docs/
-│  ├─ prd.md
-│  ├─ project.md
-│  └─ changelog.md
-└─ README.md
-```
-
-## Development (placeholder)
+## Development
 
 Desktop app development happens in `apps/desktop`.
 
@@ -68,6 +36,7 @@ Desktop app development happens in `apps/desktop`.
 
 - Node.js (LTS recommended)
 - Rust toolchain (`rustup`, stable)
+- System dependencies (e.g., `libmp3lame` might be needed on Linux, on macOS/Windows it's usually bundled or static)
 
 ### Install dependencies
 
@@ -76,11 +45,16 @@ cd apps/desktop
 npm install
 ```
 
-### Run (desktop)
+### Run (dev)
 
 ```bash
 cd apps/desktop
 npm run tauri dev
 ```
 
+### Build (release)
 
+```bash
+cd apps/desktop
+npm run tauri build
+```

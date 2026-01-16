@@ -1,8 +1,11 @@
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useState } from "react";
 
 import {
   clearGeminiApiKey,
   getGeminiApiKey,
+  getMergeAudioFiles,
+  getPreferredMic,
   getStorageDir,
   hasGeminiApiKey,
   listInputDevices,
@@ -10,6 +13,8 @@ import {
   pauseRecording,
   resumeRecording,
   setGeminiApiKey,
+  setMergeAudioFiles,
+  setPreferredMic,
   setStorageDir,
   showInFolder,
   startRecording,
@@ -44,6 +49,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState<string>("");
   const [templateId, setTemplateId] = useState<string>("meeting_notes");
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
+  const [mergeEnabled, setMergeEnabledState] = useState<boolean>(false);
 
   const selected = useMemo(
     () => recordings.find((r) => r.id === selectedId) ?? null,
@@ -60,6 +66,11 @@ export default function App() {
     return joinPaths(storageDir, selected.system_audio.relative_path);
   }, [selected, storageDir]);
 
+  const selectedAbsMergedAudioPath = useMemo(() => {
+    if (!selected || !selected.merged_audio) return "";
+    return joinPaths(storageDir, selected.merged_audio.relative_path);
+  }, [selected, storageDir]);
+
   async function refreshRecordings() {
     const list = await listRecordings();
     setRecordings(list);
@@ -67,13 +78,24 @@ export default function App() {
   }
 
   useEffect(() => {
-    Promise.all([getStorageDir(), listRecordings(), listInputDevices(), hasGeminiApiKey()])
-      .then(async ([dir, recs, devs, keyPresent]) => {
+    Promise.all([
+      getStorageDir(),
+      listRecordings(),
+      listInputDevices(),
+      hasGeminiApiKey(),
+      getMergeAudioFiles(),
+      getPreferredMic(),
+    ])
+      .then(async ([dir, recs, devs, keyPresent, merge, prefMic]) => {
         setStorageDirState(dir);
         setStorageDirDraft(dir);
         setRecordings(recs);
         setDevices(devs);
         setHasKey(keyPresent);
+        setMergeEnabledState(merge);
+        if (prefMic) {
+          setMicDevice(prefMic);
+        }
         if (keyPresent) {
           try {
             const key = await getGeminiApiKey();
@@ -85,7 +107,57 @@ export default function App() {
         if (recs[0]) setSelectedId(recs[0].id);
       })
       .catch((e) => setStatus(String(e)));
+
+    // Listen for backend events (tray/hotkey)
+    let unlisten: (() => void)[] = [];
+    let unmounted = false;
+
+    Promise.all([
+      listen<RecordingMetadata>("recording-started", (event) => {
+        console.log("External start", event);
+        setRecState("recording");
+        setSelectedId(event.payload.id);
+        setStatus("Recording started (external).");
+      }),
+      listen<RecordingMetadata>("recording-stopped", (event) => {
+        console.log("External stop", event);
+        setRecState("idle");
+        refreshRecordings().then(() => {
+          setSelectedId(event.payload.id);
+          setStatus("Recording stopped (external).");
+        });
+      }),
+    ]).then((unlisteners) => {
+      if (unmounted) {
+        unlisteners.forEach((f) => f());
+      } else {
+        unlisten = unlisteners;
+      }
+    });
+
+    return () => {
+      unmounted = true;
+      unlisten.forEach((f) => f());
+    };
   }, []);
+
+  async function onToggleMerge(enabled: boolean) {
+    setMergeEnabledState(enabled);
+    try {
+      await setMergeAudioFiles(enabled);
+    } catch (e) {
+      setStatus(`Error saving merge setting: ${String(e)}`);
+    }
+  }
+
+  async function onChangeMic(name: string) {
+    setMicDevice(name);
+    try {
+      await setPreferredMic(name || null);
+    } catch (e) {
+      setStatus(`Error saving mic preference: ${String(e)}`);
+    }
+  }
 
   async function onSaveStorage() {
     setStatus("");
@@ -237,10 +309,10 @@ export default function App() {
               <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                 Microphone
               </div>
-              <div className="mt-2">
+              <div className="mt-2 space-y-3">
                 <select
                   value={micDevice}
-                  onChange={(e) => setMicDevice(e.currentTarget.value)}
+                  onChange={(e) => onChangeMic(e.currentTarget.value)}
                   className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
                 >
                   <option value="">Not set (system audio only)</option>
@@ -250,6 +322,16 @@ export default function App() {
                     </option>
                   ))}
                 </select>
+
+                <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={mergeEnabled}
+                    onChange={(e) => onToggleMerge(e.currentTarget.checked)}
+                    className="h-4 w-4 rounded border-zinc-300 bg-white text-zinc-900 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:ring-zinc-400"
+                  />
+                  Merge system audio and microphone into one file(BETA)
+                </label>
               </div>
             </div>
           </div>
@@ -344,6 +426,9 @@ export default function App() {
                 {selected.system_audio && (
                   <div className="text-xs text-zinc-600 dark:text-zinc-400">Audio (System): {selected.system_audio.relative_path}</div>
                 )}
+                {selected.merged_audio && (
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">Audio (Merged): {selected.merged_audio.relative_path}</div>
+                )}
                 <div className="text-xs text-zinc-600 dark:text-zinc-400">
                   Duration: {selected.audio.duration_ms ? `${Math.round(selected.audio.duration_ms / 1000)}s` : "—"}
                 </div>
@@ -360,6 +445,12 @@ export default function App() {
                   <div>
                     <div className="mb-1 text-xs font-medium text-zinc-500">System Audio</div>
                     <AudioPlayer absolutePath={selectedAbsSystemAudioPath} />
+                  </div>
+                ) : null}
+                {selectedAbsMergedAudioPath ? (
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-zinc-500">Merged Audio</div>
+                    <AudioPlayer absolutePath={selectedAbsMergedAudioPath} />
                   </div>
                 ) : null}
               </div>

@@ -9,6 +9,14 @@ mod gemini;
 mod storage;
 
 use parking_lot::Mutex;
+use std::sync::Arc;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+    Emitter,
+    Manager,
+};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 struct ActiveRecording {
     session: audio::recorder::RecordingSession,
@@ -18,6 +26,94 @@ struct ActiveRecording {
 #[derive(Default)]
 struct AppState {
     recording: Mutex<Option<ActiveRecording>>,
+}
+
+fn do_start_recording(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    mic_device_name: Option<String>,
+) -> Result<storage::RecordingMetadata, String> {
+    let mut guard = state.recording.lock();
+    if guard.is_some() {
+        return Err("Recording already active.".to_string());
+    }
+
+    // Determine microphone to use
+    let mic_name = if let Some(name) = mic_device_name {
+        // Update preference if explicitly selected
+        let _ = storage::set_preferred_mic(app, Some(name.clone()));
+        Some(name)
+    } else {
+        // Fallback to preference, or None (default device)
+        storage::get_preferred_mic(app).unwrap_or(None)
+    };
+
+    let meta = storage::create_new_recording(app)?;
+    let audio_path = storage::abs_path(app, &meta.audio.relative_path)?;
+    let system_audio_path = meta
+        .system_audio
+        .as_ref()
+        .map(|s| storage::abs_path(app, &s.relative_path))
+        .transpose()?;
+    let merged_audio_path = meta
+        .merged_audio
+        .as_ref()
+        .map(|s| storage::abs_path(app, &s.relative_path))
+        .transpose()?;
+
+    let session = audio::recorder::RecordingSession::start(
+        audio_path,
+        system_audio_path,
+        merged_audio_path,
+        mic_name,
+    )?;
+    *guard = Some(ActiveRecording {
+        session,
+        meta: meta.clone(),
+    });
+
+    if let Err(e) = app.emit("recording-started", &meta) {
+        eprintln!("Failed to emit recording-started event: {}", e);
+    }
+
+    Ok(meta)
+}
+
+fn do_stop_recording(
+    app: &tauri::AppHandle,
+    state: &AppState,
+) -> Result<storage::RecordingMetadata, String> {
+    let mut guard = state.recording.lock();
+    let active = guard
+        .take()
+        .ok_or_else(|| "No active recording.".to_string())?;
+
+    let result = active.session.stop()?;
+
+    let mut meta = active.meta;
+    meta.audio.duration_ms = Some(result.duration_ms);
+    meta.audio.sample_rate = result.sample_rate;
+    meta.audio.channels = result.channels;
+
+    if let Some(sys) = &mut meta.system_audio {
+        sys.duration_ms = Some(result.duration_ms);
+        sys.sample_rate = result.sample_rate;
+        sys.channels = result.channels;
+    }
+
+    if let Some(merged) = &mut meta.merged_audio {
+        merged.duration_ms = Some(result.duration_ms);
+        merged.sample_rate = result.sample_rate;
+        merged.channels = result.channels;
+    }
+
+    storage::save_recording_metadata(app, &meta)?;
+    
+    if let Err(e) = app.emit("recording-stopped", &meta) {
+        eprintln!("Failed to emit recording-stopped event: {}", e);
+    }
+
+    Ok(meta)
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -155,27 +251,7 @@ fn start_recording(
     state: tauri::State<'_, AppState>,
     mic_device_name: Option<String>,
 ) -> Result<storage::RecordingMetadata, String> {
-    let mut guard = state.recording.lock();
-    if guard.is_some() {
-        return Err("Recording already active.".to_string());
-    }
-
-    let meta = storage::create_new_recording(&app)?;
-    let audio_path = storage::abs_path(&app, &meta.audio.relative_path)?;
-    let system_audio_path = meta
-        .system_audio
-        .as_ref()
-        .map(|s| storage::abs_path(&app, &s.relative_path))
-        .transpose()?;
-
-    let session =
-        audio::recorder::RecordingSession::start(audio_path, system_audio_path, mic_device_name)?;
-    *guard = Some(ActiveRecording {
-        session,
-        meta: meta.clone(),
-    });
-
-    Ok(meta)
+    do_start_recording(&app, &state, mic_device_name)
 }
 
 #[tauri::command]
@@ -201,26 +277,7 @@ fn stop_recording(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<storage::RecordingMetadata, String> {
-    let mut guard = state.recording.lock();
-    let active = guard
-        .take()
-        .ok_or_else(|| "No active recording.".to_string())?;
-
-    let result = active.session.stop()?;
-
-    let mut meta = active.meta;
-    meta.audio.duration_ms = Some(result.duration_ms);
-    meta.audio.sample_rate = result.sample_rate;
-    meta.audio.channels = result.channels;
-
-    if let Some(sys) = &mut meta.system_audio {
-        sys.duration_ms = Some(result.duration_ms);
-        sys.sample_rate = result.sample_rate;
-        sys.channels = result.channels;
-    }
-
-    storage::save_recording_metadata(&app, &meta)?;
-    Ok(meta)
+    do_stop_recording(&app, &state)
 }
 
 #[tauri::command]
@@ -237,9 +294,98 @@ fn save_recording_note(
     storage::save_recording_note(&app, &recording_id, &content)
 }
 
+#[tauri::command]
+fn get_merge_audio_files(app: tauri::AppHandle) -> Result<bool, String> {
+    storage::get_merge_audio_files(&app)
+}
+
+#[tauri::command]
+fn set_merge_audio_files(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    storage::set_merge_audio_files(&app, enabled)
+}
+
+#[tauri::command]
+fn get_preferred_mic(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    storage::get_preferred_mic(&app)
+}
+
+#[tauri::command]
+fn set_preferred_mic(app: tauri::AppHandle, name: Option<String>) -> Result<(), String> {
+    storage::set_preferred_mic(&app, name)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let start_i = MenuItem::with_id(app, "start", "Start Recording", true, None::<&str>)?;
+            let stop_i = MenuItem::with_id(app, "stop", "Stop Recording", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&start_i, &stop_i, &quit_i])?;
+
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .show_menu_on_left_click(true)
+                .icon(app.default_window_icon().unwrap().clone())
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    "start" => {
+                        let state = app.state::<AppState>();
+                        if let Err(e) = do_start_recording(app, &state, None) {
+                            eprintln!("Failed to start recording from tray: {}", e);
+                        } else {
+                            println!("Started recording from tray");
+                        }
+                    }
+                    "stop" => {
+                        let state = app.state::<AppState>();
+                        if let Err(e) = do_stop_recording(app, &state) {
+                            eprintln!("Failed to stop recording from tray: {}", e);
+                        } else {
+                            println!("Stopped recording from tray");
+                        }
+                    }
+                    _ => {}
+                })
+                .build(app)?;
+
+            // Global Shortcut: Cmd+Shift+R (or Ctrl+Shift+R)
+            #[cfg(target_os = "macos")]
+            let modifiers = Modifiers::SUPER | Modifiers::SHIFT;
+            #[cfg(not(target_os = "macos"))]
+            let modifiers = Modifiers::CONTROL | Modifiers::SHIFT;
+
+            let shortcut = Shortcut::new(Some(modifiers), Code::KeyR);
+            
+            app.handle().plugin(
+                tauri_plugin_global_shortcut::Builder::new().with_handler(move |app, key, event| {
+                    if event.state == ShortcutState::Pressed && key == &shortcut {
+                        let state = app.state::<AppState>();
+                        let is_recording = state.recording.lock().is_some();
+                        if is_recording {
+                            if let Err(e) = do_stop_recording(app, &state) {
+                                eprintln!("Failed to stop recording via shortcut: {}", e);
+                            } else {
+                                println!("Stopped recording via shortcut");
+                            }
+                        } else {
+                            if let Err(e) = do_start_recording(app, &state, None) {
+                                eprintln!("Failed to start recording via shortcut: {}", e);
+                            } else {
+                                println!("Started recording via shortcut");
+                            }
+                        }
+                    }
+                })
+                .build(),
+            )?;
+            
+            app.global_shortcut().register(shortcut)?;
+
+            Ok(())
+        })
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             greet,
@@ -260,7 +406,11 @@ pub fn run() {
             resume_recording,
             stop_recording,
             read_recording_note,
-            save_recording_note
+            save_recording_note,
+            get_merge_audio_files,
+            set_merge_audio_files,
+            get_preferred_mic,
+            set_preferred_mic
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

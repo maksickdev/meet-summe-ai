@@ -80,3 +80,19 @@ export async function saveRecordingNote(recordingId: string, content: string): P
 export async function showInFolder(path: string): Promise<void> {
   await invoke<void>("show_in_folder", { path });
 }
+
+export async function getMergeAudioFiles(): Promise<boolean> {
+  return await invoke<boolean>("get_merge_audio_files");
+}
+
+export async function setMergeAudioFiles(enabled: boolean): Promise<void> {
+  await invoke<void>("set_merge_audio_files", { enabled });
+}
+
+export async function getPreferredMic(): Promise<string | null> {
+  return await invoke<string | null>("get_preferred_mic");
+}
+
+export async function setPreferredMic(name: string | null): Promise<void> {
+  await invoke<void>("set_preferred_mic", { name });
+}

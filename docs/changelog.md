@@ -1,3 +1,22 @@
+## [2026-01-15] - Markdown Editor, Tray, Shortcuts, Merged Audio
+### Added
+- **Markdown Editor**: Integrated `react-markdown` + `remark-gfm` + `rehype-highlight` + `@tailwindcss/typography` for rich preview and editing of generated notes.
+- **Tray Icon Support**: Added system tray icon with menu (Start, Stop, Quit) for background control.
+- **Global Shortcuts**: Added global hotkey (`Cmd+Shift+R` on macOS, `Ctrl+Shift+R` on Win/Linux) to toggle recording.
+- **Merged Audio Recording**: Added option to record a merged MP3 file (`mic + system`) on the fly, alongside separate tracks.
+- **Settings**: Added toggle for "Merge audio files" in the UI.
+
+### Changed
+- Refactored `src/audio/recorder.rs` to support 3 parallel MP3 writers (mic, system, merged).
+- Updated `RecordingMetadata` to include `merged_audio` track info.
+- Added `read_recording_note` and `save_recording_note` commands to backend API.
+- Updated `capabilities` to include `tray:default` and `global-shortcut:default` permissions.
+
+### Fixed
+- **UI Synchronization**: Added backend events (`recording-started`, `recording-stopped`) to notify the frontend when recording is toggled via Tray Icon or Global Shortcut.
+- **Recording List Refresh**: The UI now automatically refreshes the list of recordings when a background recording is stopped.
+- **Microphone Preference**: The application now saves the last used microphone and uses it when recording is started via Tray/Hotkey (previously fell back to default device).
+
 ## [2026-01-14] - Project documentation bootstrap
 ### Added
 - Initial project documentation: `docs/project.md`
@@ -45,4 +64,3 @@
 - Implemented `Mp3StereoWriter` for efficient real-time MP3 encoding (192kbps)
 - **Fixed macOS permissions**: Added `Info.plist` with `NSMicrophoneUsageDescription` and `NSScreenCaptureUsageDescription` to properly request access
 - Note: Application must be built/bundled (`npm run tauri build`) to properly trigger macOS permission dialogs and appear in System Settings
-

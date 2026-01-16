@@ -21,6 +21,7 @@ pub struct RecordingMetadata {
     pub title: Option<String>,
     pub audio: RecordingAudioInfo,               // Microphone audio (primary)
     pub system_audio: Option<RecordingAudioInfo>, // System audio (optional)
+    pub merged_audio: Option<RecordingAudioInfo>, // Merged audio (optional)
     pub markdown_relative_path: Option<String>,
 }
 
@@ -28,6 +29,8 @@ pub struct RecordingMetadata {
 struct Settings {
     storage_dir: Option<String>,
     gemini_api_key: Option<String>,
+    merge_audio_files: Option<bool>,
+    preferred_mic_name: Option<String>,
 }
 
 pub fn resolve_storage_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -58,7 +61,23 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
 
     let audio_relative_path = format!("recordings/{id}/mic.mp3");
     let system_audio_relative_path = format!("recordings/{id}/system.mp3");
+    let merged_audio_relative_path = format!("recordings/{id}/merged.mp3");
     let markdown_relative_path = Some(format!("recordings/{id}/notes.md"));
+
+    let settings = load_settings(app)?;
+    let merge_enabled = settings.merge_audio_files.unwrap_or(false);
+
+    let merged_audio = if merge_enabled {
+        Some(RecordingAudioInfo {
+            relative_path: merged_audio_relative_path,
+            duration_ms: None,
+            format: "mp3".to_string(),
+            sample_rate: 48_000,
+            channels: 2,
+        })
+    } else {
+        None
+    };
 
     let meta = RecordingMetadata {
         id,
@@ -78,11 +97,34 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
             sample_rate: 48_000,
             channels: 2,
         }),
+        merged_audio,
         markdown_relative_path,
     };
 
     save_recording_metadata(app, &meta)?;
     Ok(meta)
+}
+
+pub fn get_merge_audio_files(app: &tauri::AppHandle) -> Result<bool, String> {
+    let settings = load_settings(app)?;
+    Ok(settings.merge_audio_files.unwrap_or(false))
+}
+
+pub fn set_merge_audio_files(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = load_settings(app)?;
+    settings.merge_audio_files = Some(enabled);
+    save_settings(app, &settings)
+}
+
+pub fn get_preferred_mic(app: &tauri::AppHandle) -> Result<Option<String>, String> {
+    let settings = load_settings(app)?;
+    Ok(settings.preferred_mic_name)
+}
+
+pub fn set_preferred_mic(app: &tauri::AppHandle, name: Option<String>) -> Result<(), String> {
+    let mut settings = load_settings(app)?;
+    settings.preferred_mic_name = name;
+    save_settings(app, &settings)
 }
 
 pub fn list_recordings(app: &tauri::AppHandle) -> Result<Vec<RecordingMetadata>, String> {

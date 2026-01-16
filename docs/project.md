@@ -30,11 +30,11 @@ SumMe is a lightweight, privacy-oriented, cross-platform desktop application tha
   - Microphone: `cpal`
   - System output (native): `qruhear` (uses `screencapturekit` on macOS, `cpal` on Windows/Linux)
   - Buffering: `ringbuf`
-  - WAV writing: `hound`
-- **Gemini integration**: Rust (`reqwest`) or Node (`@google/generative-ai`) via IPC (decision recorded below)
-- **Local storage**: filesystem + JSON metadata, optionally `tauri-plugin-store`
+  - Encoding: `mp3lame-encoder` (MP3)
+- **Gemini integration**: Rust (`reqwest`) via REST API
+- **Local storage**: filesystem + JSON metadata, `settings.json` for configuration
 - **Hotkeys**: `tauri-plugin-global-shortcut`
-- **Tray + notifications**: Tauri tray + notifications
+- **Tray**: Tauri native tray menu
 
 ## Repository layout (current)
 
@@ -87,8 +87,9 @@ sequenceDiagram
   BE->>BE: capture system+mic (ring buffer)
   U->>UI: Stop recording
   UI->>BE: stop_recording()
-  BE->>FS: write audio file (.wav/.m4a)
+  BE->>FS: write audio files (.mp3)
   BE->>FS: write metadata (recording.json)
+  BE->>UI: emit recording-stopped event
   U->>UI: Summarize with Gemini
   UI->>BE: summarize(recording_id, template)
   BE->>G: request transcript + summary
@@ -131,37 +132,39 @@ This keeps data portable and Obsidian-friendly.
 ```json
 {
   "id": "2026-01-14T12-30-00Z_abc123",
-  "createdAt": "2026-01-14T12:30:00Z",
-  "title": "Weekly Sync",
-  "language": "auto",
+  "created_at": "2026-01-14T12:30:00Z",
+  "title": null,
   "audio": {
-    "path": "recordings/2026-01-14_weekly-sync/audio.wav",
-    "durationMs": 3600000,
-    "format": "wav",
-    "sampleRate": 48000,
+    "relative_path": "recordings/2026-01-14.../mic.mp3",
+    "duration_ms": 3600000,
+    "format": "mp3",
+    "sample_rate": 48000,
     "channels": 2
   },
-  "processing": {
-    "status": "idle",
-    "lastRunAt": null,
-    "template": "meeting_notes"
+  "system_audio": {
+    "relative_path": "recordings/2026-01-14.../system.mp3",
+    "duration_ms": 3600000,
+    "format": "mp3",
+    "sample_rate": 48000,
+    "channels": 2
   },
-  "outputs": {
-    "markdownPath": "recordings/2026-01-14_weekly-sync/notes.md"
-  }
+  "merged_audio": {
+    "relative_path": "recordings/2026-01-14.../merged.mp3",
+    "duration_ms": 3600000,
+    "format": "mp3",
+    "sample_rate": 48000,
+    "channels": 2
+  },
+  "markdown_relative_path": "recordings/2026-01-14.../notes.md"
 }
 ```
 
-### Settings (planned)
+### Settings (actual)
 
-- Base storage directory
-- Default language (auto/manual)
-- Recording quality preset (low/medium/high)
-- Gemini:
-  - API key (required for summarization; stored securely; implementation-dependent)
-  - model name
-  - prompt template selection
-- Global shortcuts mapping
+- `storage_dir`: Custom path for recordings.
+- `gemini_api_key`: API key for summarization.
+- `merge_audio_files`: Boolean toggle for creating merged MP3.
+- `preferred_mic_name`: Last used microphone name.
 
 ## UI (MVP screens)
 
