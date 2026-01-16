@@ -1,3 +1,16 @@
+## [2026-01-16] - Modern UI Redesign with Radix & Tailwind
+### Added
+- **New Layout Architecture**: Implemented a 3-pane layout (Sidebar, Header, MainContent) for better scalability and UX.
+- **Settings Modal**: Moved configuration (Storage, Mic, API Key) to a dedicated `SettingsDialog` using Radix UI primitives.
+- **Modern Components**: Added `Sidebar`, `Header`, `MainContent` components using Tailwind CSS v4 and Lucide icons.
+- **Status Bar**: Added a status indicator in the Sidebar for system feedback.
+
+### Changed
+- Refactored `App.tsx` to orchestrate the new layout components instead of containing all UI logic.
+- Replaced the simple dropdown recording list with a scrollable Sidebar list featuring metadata (duration, date).
+- Redesigned the Header to be a toolbar with recording controls and settings trigger.
+- Improved MainContent area with better spacing and organization for Audio Player and Markdown Editor.
+
 ## [2026-01-15] - Markdown Editor, Tray, Shortcuts, Merged Audio
 ### Added
 - **Markdown Editor**: Integrated `react-markdown` + `remark-gfm` + `rehype-highlight` + `@tailwindcss/typography` for rich preview and editing of generated notes.

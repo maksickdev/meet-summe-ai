@@ -168,20 +168,17 @@ This keeps data portable and Obsidian-friendly.
 
 ## UI (MVP screens)
 
-- **Home**:
-  - start/pause/resume/stop buttons
-  - recordings list
-  - selected recording: player + summarize button
-- **Recording state**:
-  - timer
-  - tray indicator: idle/recording/processing
-- **Preview**:
-  - markdown preview + basic editing
-  - export/copy
-- **Settings**:
-  - storage folder
-  - Gemini API key and templates
-  - hotkeys
+- **Layout**:
+  - **Sidebar (Left)**: Scrollable list of recordings with metadata (date, duration).
+  - **Header (Top)**: Global recording controls (Start/Stop/Pause), status indicator, and Settings trigger.
+  - **Main Content (Right)**:
+    - **Audio Player**: Multi-track playback (Mic, System, Merged).
+    - **Summarization**: Controls to generate AI summaries.
+    - **Editor**: Markdown editor for transcript/notes.
+- **Settings (Dialog)**:
+  - Storage directory configuration.
+  - Audio device selection and merge options.
+  - Gemini API key management.
 
 ## Prompt templates
 

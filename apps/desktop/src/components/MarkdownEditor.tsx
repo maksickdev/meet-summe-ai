@@ -44,8 +44,8 @@ export function MarkdownEditor({ recordingId }: MarkdownEditorProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div className="text-xs font-semibold uppercase text-zinc-500">
           Notes {status && <span className="font-normal text-zinc-400">({status})</span>}
         </div>
@@ -81,23 +81,25 @@ export function MarkdownEditor({ recordingId }: MarkdownEditorProps) {
         </div>
       </div>
 
-      {isEditing ? (
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          className="min-h-[300px] w-full rounded-md border border-zinc-300 bg-white p-3 font-mono text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-        />
-      ) : content ? (
-        <div className="prose prose-sm dark:prose-invert max-w-none rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-            {content}
-          </ReactMarkdown>
-        </div>
-      ) : (
-        <div className="rounded-md border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
-          No notes yet. Click "Summarize" to generate one.
-        </div>
-      )}
+      <div className="flex-1 overflow-auto p-4">
+        {isEditing ? (
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="h-full w-full resize-none bg-transparent font-mono text-sm outline-none dark:text-zinc-50"
+          />
+        ) : content ? (
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+              {content}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-md border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
+            No notes yet. Click "Summarize" to generate one.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
