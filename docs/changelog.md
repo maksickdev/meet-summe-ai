@@ -1,6 +1,21 @@
 ## [2026-01-19] - UI Style Refinements
+### Added
+- **Radix UI Integration**: Migrated entire UI component library to use Radix UI primitives for accessible and robust interactions.
+- **Custom UI Component Library**: Created a suite of reusable, styled components in `src/components/ui/` based on shadcn/ui patterns:
+  - `Button`, `Input`, `Label`, `Select`, `Slider`, `Switch`, `Separator`
+  - `Dialog`, `ScrollArea`, `ContextMenu`
+- **Settings Dialog Refactor**: Complete rewrite of the Settings modal using `Dialog`, `Select`, `Switch`, and `Input` components for a polished look and feel.
+- **Audio Player Refactor**: Redesigned Audio Player with custom controls using `Slider` and `Button` for seeking, play/pause, and volume/mute (replacing native HTML5 audio controls).
+
 ### Changed
-- Updated Header background color to `zinc-900` (#18181b) in dark mode for better visual consistency.
+- **Unified Design System**: Applied consistent styling across all dialogs, sidebars, and main content areas using the new component library.
+- **Improved Sidebar**: Refactored Sidebar to use `ScrollArea` and `ContextMenu` for smoother scrolling and native-like interactions.
+- **Enhanced Main Content**: Updated the main workspace to use `ScrollArea` for better content overflow handling.
+- **Updated Header background color** to `zinc-900` (#18181b) in dark mode for better visual consistency.
+- **Layout Refinements**: Adjusted global layout to allow more flexible status bar positioning and improved container sizing.
+
+### Fixed
+- Fixed an issue where the status bar was nested incorrectly within the layout hierarchy, moving it to the root level for better visibility and layout behavior.
 
 ## [2026-01-16] - Modern UI Redesign with Radix & Tailwind
 ### Added

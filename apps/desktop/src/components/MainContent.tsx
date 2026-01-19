@@ -2,8 +2,10 @@ import type { RecordingMetadata } from "../types/recording";
 import { AudioPlayer } from "./AudioPlayer";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { Bot, FileText, Folder, Sparkles, Mic } from "lucide-react";
-import * as ScrollArea from "@radix-ui/react-scroll-area";
-import { cn } from "../lib/utils";
+import { ScrollArea } from "./ui/scroll-area";
+import { Button } from "./ui/button";
+import { Select } from "./ui/select";
+import { Separator } from "./ui/separator";
 
 interface MainContentProps {
   selected: RecordingMetadata | null;
@@ -54,8 +56,7 @@ export function MainContent({
     : null;
 
   return (
-    <ScrollArea.Root className="h-full w-full bg-white dark:bg-zinc-950">
-      <ScrollArea.Viewport className="h-full w-full">
+    <ScrollArea className="h-full w-full bg-white dark:bg-zinc-950">
         <div className="mx-auto max-w-4xl p-6 space-y-6">
           
           {/* Audio Section */}
@@ -73,13 +74,14 @@ export function MainContent({
                         </span>
                     </div>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={onShowInFolder}
-                  className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
                   title="Show in Folder"
                 >
                     <Folder className="w-5 h-5" />
-                </button>
+                </Button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -110,7 +112,7 @@ export function MainContent({
             </div>
           </section>
 
-          <div className="h-px bg-zinc-100 dark:bg-zinc-800" />
+          <Separator />
 
           {/* Transcript / Notes Section */}
           <section className="space-y-4">
@@ -121,30 +123,25 @@ export function MainContent({
               </div>
               
               <div className="flex items-center gap-2">
-                 <select
+                 <Select
                     value={templateId}
                     onChange={(e) => onTemplateChange(e.target.value)}
-                    className="h-9 rounded-md border border-zinc-200 bg-transparent px-3 text-sm outline-none focus:ring-2 focus:ring-zinc-900 dark:border-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-100"
+                    className="w-[150px]"
                   >
                     <option value="meeting_notes">Meeting Notes</option>
                     <option value="lecture_notes">Lecture Notes</option>
                     <option value="brainstorming">Brainstorming</option>
                     <option value="interview">Interview</option>
-                  </select>
+                  </Select>
                   
-                  <button
+                  <Button
                     onClick={onSummarize}
                     disabled={isSummarizing || !hasKey}
-                    className={cn(
-                        "h-9 px-4 rounded-md text-sm font-medium transition-all flex items-center gap-2",
-                        !hasKey 
-                            ? "bg-zinc-100 text-zinc-400 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-600" 
-                            : "bg-purple-600 text-white hover:bg-purple-700 shadow-sm active:scale-95 disabled:opacity-70 disabled:active:scale-100"
-                    )}
+                    className="bg-purple-600 text-white hover:bg-purple-700"
                   >
                     {isSummarizing ? "Processing..." : "Generate"}
                     {!hasKey && <span className="sr-only">(Key missing)</span>}
-                  </button>
+                  </Button>
               </div>
             </div>
 
@@ -155,12 +152,7 @@ export function MainContent({
                />
             </div>
           </section>
-
         </div>
-      </ScrollArea.Viewport>
-      <ScrollArea.Scrollbar orientation="vertical" className="flex select-none touch-none p-0.5 bg-zinc-100 transition-colors duration-[160ms] ease-out hover:bg-zinc-200 data-[orientation=vertical]:w-2.5 data-[orientation=horizontal]:flex-col data-[orientation=horizontal]:h-2.5 dark:bg-zinc-800 dark:hover:bg-zinc-700">
-        <ScrollArea.Thumb className="flex-1 bg-zinc-300 rounded-[10px] relative before:content-[''] before:absolute before:top-1/2 before:left-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:w-full before:h-full before:min-w-[44px] before:min-h-[44px] dark:bg-zinc-600" />
-      </ScrollArea.Scrollbar>
-    </ScrollArea.Root>
+    </ScrollArea>
   );
 }

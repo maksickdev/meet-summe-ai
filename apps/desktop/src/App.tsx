@@ -351,7 +351,6 @@ export default function App() {
             onOpenSettings={() => setIsSettingsOpen(true)}
         />
         <AppLayout
-            status={status}
             sidebar={
                 <Sidebar 
                     recordings={recordings} 
@@ -373,6 +372,10 @@ export default function App() {
                 onShowInFolder={onShowInFolder}
             />
         </AppLayout>
+
+        <div className="border-t border-zinc-200 bg-zinc-50 p-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 truncate h-[33px]" title={status}>
+          {status}
+        </div>
 
         <SettingsDialog 
             open={isSettingsOpen}

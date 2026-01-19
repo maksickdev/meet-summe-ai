@@ -2,8 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import type { RecordingMetadata } from "../types/recording";
 import { cn } from "../lib/utils";
 import { Music, Calendar, Trash2, Edit2 } from "lucide-react";
-import * as ScrollArea from "@radix-ui/react-scroll-area";
-import * as ContextMenu from "@radix-ui/react-context-menu";
+import { ScrollArea } from "./ui/scroll-area";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "./ui/context-menu";
+import { Input } from "./ui/input";
 
 interface SidebarProps {
   recordings: RecordingMetadata[];
@@ -56,16 +62,16 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
         <p className="text-xs text-zinc-500 mt-1">{recordings.length} recordings</p>
       </div>
       
-      <ScrollArea.Root className="flex-1 overflow-hidden bg-white dark:bg-zinc-950">
-        <ScrollArea.Viewport className="h-full w-full p-2 space-y-1">
+      <ScrollArea className="flex-1 bg-white dark:bg-zinc-950">
           {recordings.length === 0 ? (
             <div className="p-4 text-center text-sm text-zinc-500">
               No recordings yet.
             </div>
           ) : (
-            recordings.map((rec) => (
-              <ContextMenu.Root key={rec.id}>
-                <ContextMenu.Trigger>
+            <div className="p-2 space-y-1">
+            {recordings.map((rec) => (
+              <ContextMenu key={rec.id}>
+                <ContextMenuTrigger>
                   <div
                     onClick={() => {
                         if (editingId !== rec.id) onSelect(rec.id);
@@ -79,14 +85,14 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
                     )}
                   >
                     {editingId === rec.id ? (
-                        <input
+                        <Input
                             ref={inputRef}
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
                             onBlur={saveRename}
                             onKeyDown={handleKeyDown}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-full bg-transparent outline-none font-medium text-zinc-900 dark:text-zinc-100 border-b border-blue-500 pb-0.5"
+                            className="h-6 w-full px-1 py-0 text-sm bg-transparent border-blue-500"
                         />
                     ) : (
                         <div className="font-medium text-zinc-900 dark:text-zinc-100 truncate">
@@ -104,36 +110,30 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
                       ) : null}
                     </div>
                   </div>
-                </ContextMenu.Trigger>
+                </ContextMenuTrigger>
                 
-                <ContextMenu.Portal>
-                  <ContextMenu.Content className="min-w-[160px] overflow-hidden rounded-md border border-zinc-200 bg-white p-1 shadow-md dark:border-zinc-800 dark:bg-zinc-950 z-50">
-                    <ContextMenu.Item 
-                        className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-zinc-100 focus:text-zinc-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 dark:focus:bg-zinc-800 dark:focus:text-zinc-50"
+                <ContextMenuContent>
+                    <ContextMenuItem 
                         onSelect={() => startRenaming(rec)}
                     >
                       <Edit2 className="mr-2 h-4 w-4" />
                       Rename
-                    </ContextMenu.Item>
-                    <ContextMenu.Item 
-                        className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-red-50 focus:text-red-600 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 dark:focus:bg-red-950/20 dark:focus:text-red-400 text-red-600 dark:text-red-400"
+                    </ContextMenuItem>
+                    <ContextMenuItem 
+                        className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20 dark:text-red-400 dark:focus:text-red-400"
                         onSelect={() => {
                           setTimeout(() => onDelete(rec.id), 0);
                         }}
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete
-                    </ContextMenu.Item>
-                  </ContextMenu.Content>
-                </ContextMenu.Portal>
-              </ContextMenu.Root>
-            ))
+                    </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            ))}
+            </div>
           )}
-        </ScrollArea.Viewport>
-        <ScrollArea.Scrollbar orientation="vertical" className="flex select-none touch-none p-0.5 bg-zinc-100 transition-colors duration-[160ms] ease-out hover:bg-zinc-200 data-[orientation=vertical]:w-2.5 data-[orientation=horizontal]:flex-col data-[orientation=horizontal]:h-2.5 dark:bg-zinc-800 dark:hover:bg-zinc-700">
-          <ScrollArea.Thumb className="flex-1 bg-zinc-300 rounded-[10px] relative before:content-[''] before:absolute before:top-1/2 before:left-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:w-full before:h-full before:min-w-[44px] before:min-h-[44px] dark:bg-zinc-600" />
-        </ScrollArea.Scrollbar>
-      </ScrollArea.Root>
+      </ScrollArea>
     </div>
   );
 }
