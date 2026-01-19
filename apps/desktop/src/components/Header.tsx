@@ -1,4 +1,5 @@
 import { Settings, Mic, Square, Play, Pause } from "lucide-react";
+import logo from "../assets/logo.png";
 
 interface HeaderProps {
   recState: "idle" | "recording" | "paused";
@@ -22,19 +23,19 @@ export function Header({
   const isPaused = recState === "paused";
 
   return (
-    <header className="relative flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-zinc-900 shrink-0 z-10">
+    <header className="relative flex h-14 items-center justify-between bg-white px-4 dark:bg-zinc-900 shrink-0 z-10">
       <div className="flex items-center gap-2 font-semibold text-lg tracking-tight">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900">
-          <span className="font-bold">S</span>
+        <div className="flex h-12 w-12 items-center justify-center">
+          <img src={logo} alt="Summerizer" className="w-full h-full object-cover" />
         </div>
-        <span>Summerizer</span>
+        <span>sum<span className="text-blue-800">me</span></span>
       </div>
 
       <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50/50 p-1 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/50 shadow-sm">
         {isIdle ? (
           <button
             onClick={onStart}
-            className="group flex items-center gap-2 rounded-full bg-red-600 px-4 py-1.5 text-sm font-medium text-white transition-all hover:bg-red-700 active:scale-95"
+            className="group flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium text-white transition-all hover:bg-red-700 active:scale-95"
           >
             <Mic className="h-4 w-4" />
             <span>Record</span>

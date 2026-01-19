@@ -8,14 +8,22 @@
 - **Audio Player Refactor**: Redesigned Audio Player with custom controls using `Slider` and `Button` for seeking, play/pause, and volume/mute (replacing native HTML5 audio controls).
 
 ### Changed
+- Replaced Header logo text with image asset.
 - **Unified Design System**: Applied consistent styling across all dialogs, sidebars, and main content areas using the new component library.
 - **Improved Sidebar**: Refactored Sidebar to use `ScrollArea` and `ContextMenu` for smoother scrolling and native-like interactions.
 - **Enhanced Main Content**: Updated the main workspace to use `ScrollArea` for better content overflow handling.
 - **Updated Header background color** to `zinc-900` (#18181b) in dark mode for better visual consistency.
 - **Layout Refinements**: Adjusted global layout to allow more flexible status bar positioning and improved container sizing.
+- **Sidebar Styling**: Updated background to `#101013`, added rounded corners (`8px`) and margins (`10px`) for a floating panel look.
+- **Theme Enforcement**: Set `AppLayout` background to dark (`#101013`) to ensure consistent dark theme appearance.
+- **Sidebar Cleanups**: Removed background from Sidebar header and ScrollArea to blend with the new container background.
+- **Visual Polish**: Removed element borders and margins (Header, Sidebar, Footer) and added consistent global padding to AppLayout.
+- **Refined Borders**: Adjusted Sidebar and AppLayout border radius to `8px` and fine-tuned borders and margins.
+- **Sidebar Borders**: Added full border to Sidebar with consistent dark mode color (`zinc-800`) to improve separation from the background.
 
 ### Fixed
 - Fixed an issue where the status bar was nested incorrectly within the layout hierarchy, moving it to the root level for better visibility and layout behavior.
+- Fixed `AppLayout` background color to strictly use `zinc-900` (`#18181b`) matching the visual design.
 
 ## [2026-01-16] - Modern UI Redesign with Radix & Tailwind
 ### Added

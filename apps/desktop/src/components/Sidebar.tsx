@@ -53,8 +53,8 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
   }
 
   return (
-    <div className={cn("flex h-full w-64 flex-col border-r border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50", className)}>
-      <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-950">
+    <div className={cn("flex h-full w-64 flex-col border border-zinc-200 bg-[#101013] rounded-lg dark:border-zinc-800", className)}>
+      <div className="p-4">
         <h2 className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
           <Music className="w-4 h-4" />
           Library
@@ -62,7 +62,7 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
         <p className="text-xs text-zinc-500 mt-1">{recordings.length} recordings</p>
       </div>
       
-      <ScrollArea className="flex-1 bg-white dark:bg-zinc-950">
+      <ScrollArea className="flex-1 bg-transparent">
           {recordings.length === 0 ? (
             <div className="p-4 text-center text-sm text-zinc-500">
               No recordings yet.

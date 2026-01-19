@@ -37,7 +37,7 @@ export function MainContent({
 }: MainContentProps) {
   if (!selected) {
     return (
-      <div className="flex h-full flex-col items-center justify-center bg-zinc-50/50 text-center text-zinc-500 dark:bg-zinc-900/50 dark:text-zinc-400">
+      <div className="flex h-full flex-col items-center justify-center bg-zinc-50/50 text-center text-zinc-500 dark:bg-[#101013] dark:text-zinc-400">
         <div className="mb-4 rounded-full bg-zinc-100 p-4 dark:bg-zinc-800">
           <Bot className="h-8 w-8 opacity-50" />
         </div>
@@ -118,7 +118,7 @@ export function MainContent({
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                <Sparkles className="w-5 h-5 text-purple-500" />
+                <Sparkles className="w-5 h-5 text-white-800" />
                 <span>AI Summary</span>
               </div>
               
