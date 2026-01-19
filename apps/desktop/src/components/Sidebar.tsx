@@ -11,11 +11,10 @@ interface SidebarProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, newTitle: string) => void;
-  status?: string;
   className?: string;
 }
 
-export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, status, className }: SidebarProps) {
+export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, className }: SidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -49,7 +48,7 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
 
   return (
     <div className={cn("flex h-full w-64 flex-col border-r border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50", className)}>
-      <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-950">
         <h2 className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
           <Music className="w-4 h-4" />
           Library
@@ -135,12 +134,6 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
           <ScrollArea.Thumb className="flex-1 bg-zinc-300 rounded-[10px] relative before:content-[''] before:absolute before:top-1/2 before:left-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:w-full before:h-full before:min-w-[44px] before:min-h-[44px] dark:bg-zinc-600" />
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
-
-      {status && (
-        <div className="border-t border-zinc-200 bg-zinc-50 p-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 truncate" title={status}>
-          {status}
-        </div>
-      )}
     </div>
   );
 }

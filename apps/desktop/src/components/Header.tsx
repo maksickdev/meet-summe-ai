@@ -22,7 +22,7 @@ export function Header({
   const isPaused = recState === "paused";
 
   return (
-    <header className="relative flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-zinc-950 shrink-0 z-10">
+    <header className="relative flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-zinc-900 shrink-0 z-10">
       <div className="flex items-center gap-2 font-semibold text-lg tracking-tight">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900">
           <span className="font-bold">S</span>

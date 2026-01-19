@@ -1,3 +1,7 @@
+## [2026-01-19] - UI Style Refinements
+### Changed
+- Updated Header background color to `zinc-900` (#18181b) in dark mode for better visual consistency.
+
 ## [2026-01-16] - Modern UI Redesign with Radix & Tailwind
 ### Added
 - **New Layout Architecture**: Implemented a 3-pane layout (Sidebar, Header, MainContent) for better scalability and UX.

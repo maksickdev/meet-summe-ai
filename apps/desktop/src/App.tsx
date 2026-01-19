@@ -86,7 +86,7 @@ export default function App() {
     setRecordings(list);
     // If we have no selected ID but we have recordings, select the first one
     if (!selectedIdRef.current && list.length > 0) {
-        setSelectedId(list[0].id);
+      setSelectedId(list[0].id);
     }
   }
 
@@ -341,8 +341,17 @@ export default function App() {
   // --- Render ---
 
   return (
-    <>
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-white text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 shadow-2xl">
+        <Header 
+            recState={recState}
+            onStart={onStart}
+            onPause={onPause}
+            onResume={onResume}
+            onStop={onStop}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+        />
         <AppLayout
+            status={status}
             sidebar={
                 <Sidebar 
                     recordings={recordings} 
@@ -350,17 +359,6 @@ export default function App() {
                     onSelect={setSelectedId}
                     onDelete={onDelete}
                     onRename={onRename}
-                    status={status} 
-                />
-            }
-            header={
-                <Header 
-                    recState={recState}
-                    onStart={onStart}
-                    onPause={onPause}
-                    onResume={onResume}
-                    onStop={onStop}
-                    onOpenSettings={() => setIsSettingsOpen(true)}
                 />
             }
         >
@@ -406,6 +404,6 @@ export default function App() {
             onConfirm={confirmDelete}
             isLoading={isDeleting}
         />
-    </>
+    </div>
   );
 }
