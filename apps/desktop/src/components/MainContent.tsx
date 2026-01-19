@@ -56,8 +56,8 @@ export function MainContent({
     : null;
 
   return (
-    <ScrollArea className="h-full w-full bg-white dark:bg-zinc-950">
-        <div className="mx-auto max-w-4xl p-6 space-y-6">
+    <ScrollArea className="h-full w-full bg-white dark:bg-[#101013]">
+        <div className="mx-auto max-w-8xl p-6 space-y-6">
           
           {/* Audio Section */}
           <section className="space-y-4">

@@ -1,3 +1,7 @@
+## [2026-01-20] - Window Configuration
+### Changed
+- Set minimum window dimensions to 800x600 in `tauri.conf.json` to prevent layout issues.
+
 ## [2026-01-19] - UI Style Refinements
 ### Added
 - **Radix UI Integration**: Migrated entire UI component library to use Radix UI primitives for accessible and robust interactions.

@@ -53,7 +53,7 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
   }
 
   return (
-    <div className={cn("flex h-full w-64 flex-col border border-zinc-200 bg-[#101013] rounded-lg dark:border-zinc-800", className)}>
+    <div className={cn("flex h-full w-64 flex-col border border-zinc-200 dark:bg-[#101013] rounded-lg dark:border-zinc-800", className)}>
       <div className="p-4">
         <h2 className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
           <Music className="w-4 h-4" />
