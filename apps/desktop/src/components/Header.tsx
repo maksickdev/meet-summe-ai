@@ -1,5 +1,5 @@
 import { Settings, Mic, Square, Play, Pause } from "lucide-react";
-import logo from "../assets/logo.png";
+import logo from "../assets/logo-motion.svg";
 
 interface HeaderProps {
   recState: "idle" | "recording" | "paused";
@@ -24,7 +24,7 @@ export function Header({
 
   return (
     <header className="relative flex h-14 items-center justify-between bg-white px-4 dark:bg-zinc-900 shrink-0 z-10">
-      <div className="flex items-center gap-2 font-semibold text-lg tracking-tight">
+      <div className="flex items-center gap-2 font-semibold text-[38px] tracking-tight">
         <div className="flex h-12 w-12 items-center justify-center">
           <img src={logo} alt="Summerizer" className="w-full h-full object-cover" />
         </div>

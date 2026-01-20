@@ -1,6 +1,8 @@
-## [2026-01-20] - Window Configuration
+## [2026-01-20] - Window Configuration & Branding
 ### Changed
 - Set minimum window dimensions to 800x600 in `tauri.conf.json` to prevent layout issues.
+- Replaced the raster logo in the Header with an animated SVG logo (`logo-motion.svg`) for better visual appeal.
+- Increased header title font size to 38px for better brand visibility.
 
 ## [2026-01-19] - UI Style Refinements
 ### Added
