@@ -5,10 +5,11 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use mp3lame_encoder::Bitrate;
 use ringbuf::traits::{Consumer, Producer, Split};
 
 use crate::audio::device;
-use crate::audio::writer::Mp3StereoWriter;
+use crate::audio::writer::Mp3Writer;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RecordingResult {
@@ -27,6 +28,7 @@ pub struct RecordingSession {
     paused_accum_ms: Arc<Mutex<u64>>,
     pause_started_at: Arc<Mutex<Option<Instant>>>,
     sample_rate: u32,
+    channels: u16,
     audio_path: PathBuf,
     system_audio_path: Option<PathBuf>,
     merged_audio_path: Option<PathBuf>,
@@ -39,12 +41,15 @@ impl RecordingSession {
         system_audio_path: Option<PathBuf>,
         merged_audio_path: Option<PathBuf>,
         mic_device_name: Option<String>,
+        quality_mode: &str,
     ) -> Result<Self, String> {
-        // Fixed sample rate for consistent audio quality
-        const SAMPLE_RATE: u32 = 48_000;
+        let (sample_rate, channels, bitrate) = if quality_mode == "size" {
+            (16_000, 1u16, Bitrate::Kbps32)
+        } else {
+            (48_000, 2u16, Bitrate::Kbps64)
+        };
 
-        // Buffer about ~5 seconds at 48kHz. Writer drains it continuously.
-        // Larger buffers help prevent drops when system/mic have different callback rates
+        // Buffer about ~5 seconds at 48kHz (max rate). Writer drains it continuously.
         let rb_system = ringbuf::HeapRb::<f32>::new(240_000);
         let rb_mic = ringbuf::HeapRb::<f32>::new(240_000);
         let (prod_system, cons_system) = rb_system.split();
@@ -55,8 +60,6 @@ impl RecordingSession {
         let started_at = Instant::now();
         let paused_accum_ms = Arc::new(Mutex::new(0u64));
         let pause_started_at = Arc::new(Mutex::new(None::<Instant>));
-
-        let sample_rate = SAMPLE_RATE;
 
         let writer_thread = {
             let paused = Arc::clone(&paused);
@@ -72,6 +75,8 @@ impl RecordingSession {
                     system_audio_path,
                     merged_audio_path,
                     sample_rate,
+                    channels,
+                    bitrate,
                     cons_system,
                     cons_mic,
                     paused,
@@ -88,16 +93,16 @@ impl RecordingSession {
         let system_thread = {
             let paused = Arc::clone(&paused);
             let stop = Arc::clone(&stop);
-            std::thread::spawn(move || system_capture_loop(prod_system, paused, stop))
+            std::thread::spawn(move || system_capture_loop(prod_system, sample_rate, paused, stop))
         };
         threads.push(system_thread);
 
-        // Microphone capture via cpal with fixed sample rate.
+        // Microphone capture via cpal
         let mic_thread = {
             let paused = Arc::clone(&paused);
             let stop = Arc::clone(&stop);
             std::thread::spawn(move || {
-                mic_capture_loop(prod_mic, mic_device_name, SAMPLE_RATE, paused, stop)
+                mic_capture_loop(prod_mic, mic_device_name, sample_rate, paused, stop)
             })
         };
         threads.push(mic_thread);
@@ -109,6 +114,7 @@ impl RecordingSession {
             paused_accum_ms,
             pause_started_at,
             sample_rate,
+            channels,
             audio_path,
             system_audio_path,
             merged_audio_path,
@@ -169,14 +175,40 @@ impl RecordingSession {
                 .merged_audio_path
                 .map(|p| p.to_string_lossy().to_string()),
             sample_rate: self.sample_rate,
-            channels: 2,
+            channels: self.channels,
             duration_ms,
         })
     }
 }
 
+// Simple nearest-neighbor resampler logic state
+struct NnResampler {
+    accum: u32,
+}
+
+impl NnResampler {
+    fn new() -> Self {
+        Self { accum: 0 }
+    }
+
+    // Returns true if current sample should be emitted
+    fn should_emit(&mut self, source_rate: u32, target_rate: u32) -> bool {
+        if source_rate == target_rate {
+            return true;
+        }
+        self.accum += target_rate;
+        if self.accum >= source_rate {
+            self.accum -= source_rate;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 fn system_capture_loop(
     prod_system: impl Producer<Item = f32> + Send + 'static,
+    target_sample_rate: u32,
     paused: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
 ) -> Result<(), String> {
@@ -186,10 +218,11 @@ fn system_capture_loop(
     let stop_cb = Arc::clone(&stop);
     let paused_cb = Arc::clone(&paused);
     
-    // qruhear typically runs at 44.1kHz or 48kHz depending on the system
-    // We need to resample to match our target 48kHz
-    let system_sample_rate = Arc::new(Mutex::new(None::<u32>));
-    let system_sample_rate_cb = Arc::clone(&system_sample_rate);
+    let detected_sample_rate = Arc::new(Mutex::new(None::<u32>));
+    let detected_sample_rate_cb = Arc::clone(&detected_sample_rate);
+    
+    // Resampler state
+    let resampler = Arc::new(Mutex::new(NnResampler::new()));
     
     let callback = move |audio_buffers: RUBuffers| {
         if stop_cb.load(Ordering::SeqCst) || paused_cb.load(Ordering::SeqCst) {
@@ -199,15 +232,22 @@ fn system_capture_loop(
             return;
         }
         
-        // Detect sample rate on first callback (qruhear doesn't expose it directly)
-        // Common system audio rates: 44100, 48000
-        if system_sample_rate_cb.lock().unwrap().is_none() {
-            eprintln!("[System Audio] Detected audio capture started");
-            *system_sample_rate_cb.lock().unwrap() = Some(48000); // Assume 48kHz for now
-        }
-        
-        // Downmix to mono by averaging all channels.
         let frames = audio_buffers[0].len();
+        
+        // Detect sample rate on first callback
+        let mut source_rate = 48000;
+        if let Ok(mut guard) = detected_sample_rate_cb.lock() {
+            if guard.is_none() {
+                // qruhear default assumption
+                *guard = Some(48000); 
+                eprintln!("[System Audio] Assuming source rate 48000 Hz");
+            }
+            source_rate = guard.unwrap_or(48000);
+        }
+
+        let mut res = resampler.lock().unwrap();
+
+        // Downmix to mono by averaging all channels.
         for i in 0..frames {
             let mut sum = 0.0f32;
             for ch in &audio_buffers {
@@ -216,10 +256,11 @@ fn system_capture_loop(
                 }
             }
             let v = sum / (audio_buffers.len() as f32);
-            if let Ok(mut p) = producer.lock() {
-                if p.try_push(v).is_err() {
-                    // Buffer full, skip sample (this shouldn't happen often)
-                }
+
+            if res.should_emit(source_rate, target_sample_rate) {
+                 if let Ok(mut p) = producer.lock() {
+                     let _ = p.try_push(v);
+                 }
             }
         }
     };
@@ -246,7 +287,7 @@ fn system_capture_loop(
 fn mic_capture_loop(
     prod_mic: impl Producer<Item = f32> + Send + 'static,
     mic_device_name: Option<String>,
-    sample_rate: u32,
+    target_sample_rate: u32,
     paused: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
 ) -> Result<(), String> {
@@ -258,12 +299,13 @@ fn mic_capture_loop(
             .ok_or_else(|| "No default input device available.".to_string())?
     };
 
-    let (config, sample_format) = select_mic_config(&device, sample_rate)?;
+    let (config, sample_format) = select_mic_config(&device, target_sample_rate)?;
+    let stream_sample_rate = config.sample_rate.0;
     let channels = config.channels as usize;
     
     eprintln!(
-        "[Microphone] Starting capture: {}Hz, {} channels, format: {:?}",
-        config.sample_rate.0, channels, sample_format
+        "[Microphone] Starting capture: {}Hz (target {}), {} channels, format: {:?}",
+        stream_sample_rate, target_sample_rate, channels, sample_format
     );
 
     let prod = Arc::new(Mutex::new(prod_mic));
@@ -275,37 +317,44 @@ fn mic_capture_loop(
     let paused_i16 = Arc::clone(&paused);
     let stop_u16 = Arc::clone(&stop);
     let paused_u16 = Arc::clone(&paused);
+    
+    let resampler = Arc::new(Mutex::new(NnResampler::new()));
+
+    // Callback wrapper to handle resampling if needed
+    let mut handle_sample = {
+        let prod = Arc::clone(&prod);
+        let resampler = Arc::clone(&resampler);
+        move |s: f32| {
+             let mut res = resampler.lock().unwrap();
+             if res.should_emit(stream_sample_rate, target_sample_rate) {
+                 if let Ok(mut p) = prod.lock() {
+                    let _ = p.try_push(s);
+                 }
+             }
+        }
+    };
 
     let stream = match sample_format {
         cpal::SampleFormat::F32 => device.build_input_stream(
             &config,
-            {
-                let prod = Arc::clone(&prod);
-                move |data: &[f32], _| {
-                    write_mic_samples_f32(data, channels, &prod, &paused_f32, &stop_f32)
-                }
+            move |data: &[f32], _| {
+                write_mic_samples(data, channels, &stop_f32, &paused_f32, &mut handle_sample, |x| x)
             },
             err_fn,
             None,
         ),
         cpal::SampleFormat::I16 => device.build_input_stream(
             &config,
-            {
-                let prod = Arc::clone(&prod);
-                move |data: &[i16], _| {
-                    write_mic_samples_i16(data, channels, &prod, &paused_i16, &stop_i16)
-                }
+            move |data: &[i16], _| {
+                write_mic_samples(data, channels, &stop_i16, &paused_i16, &mut handle_sample, |x| (x as f32) / (i16::MAX as f32))
             },
             err_fn,
             None,
         ),
         cpal::SampleFormat::U16 => device.build_input_stream(
             &config,
-            {
-                let prod = Arc::clone(&prod);
-                move |data: &[u16], _| {
-                    write_mic_samples_u16(data, channels, &prod, &paused_u16, &stop_u16)
-                }
+            move |data: &[u16], _| {
+                write_mic_samples(data, channels, &stop_u16, &paused_u16, &mut handle_sample, |x| (x as f32 - 32768.0) / 32768.0)
             },
             err_fn,
             None,
@@ -329,103 +378,34 @@ fn mic_capture_loop(
     Ok(())
 }
 
-fn write_mic_samples_f32<P: Producer<Item = f32>>(
-    data: &[f32],
-    channels: usize,
-    prod: &Arc<Mutex<P>>,
-    paused: &Arc<AtomicBool>,
-    stop: &Arc<AtomicBool>,
-) {
-    if stop.load(Ordering::SeqCst) || paused.load(Ordering::SeqCst) {
-        return;
-    }
-    if let Ok(mut p) = prod.lock() {
-        let mut pushed = 0;
-        
-        // Check for silence (all zeros) in the first chunk occasionally for debugging
-        if data.len() > 0 && data[0] == 0.0 && data[data.len()-1] == 0.0 {
-             // Simple heuristic: check sum of absolute values
-             let sum_abs: f32 = data.iter().map(|s| s.abs()).sum();
-             if sum_abs == 0.0 {
-                 // Only log once every few seconds to avoid spam, or relying on manual observation
-                 // eprintln!("[Microphone] Warning: Received block of absolute silence (zeros). OS might be muting input.");
-             }
-        }
-
-        if channels <= 1 {
-            for s in data {
-                if p.try_push(*s).is_ok() {
-                    pushed += 1;
-                }
-            }
-        } else {
-            // Downmix interleaved multi-channel input to mono.
-            for frame in data.chunks(channels) {
-                let mut sum = 0.0f32;
-                for s in frame {
-                    sum += *s;
-                }
-                if p.try_push(sum / (channels as f32)).is_ok() {
-                    pushed += 1;
-                }
-            }
-        }
-        if pushed < data.len() / channels {
-            eprintln!("[Microphone] Warning: buffer full, dropped {} samples", (data.len() / channels) - pushed);
-        }
-    }
-}
-
-fn write_mic_samples_i16<P: Producer<Item = f32>>(
-    data: &[i16],
-    channels: usize,
-    prod: &Arc<Mutex<P>>,
-    paused: &Arc<AtomicBool>,
-    stop: &Arc<AtomicBool>,
-) {
-    write_mic_samples_with_convert(data, channels, prod, paused, stop, |s| {
-        (s as f32) / (i16::MAX as f32)
-    });
-}
-
-fn write_mic_samples_u16<P: Producer<Item = f32>>(
-    data: &[u16],
-    channels: usize,
-    prod: &Arc<Mutex<P>>,
-    paused: &Arc<AtomicBool>,
-    stop: &Arc<AtomicBool>,
-) {
-    write_mic_samples_with_convert(data, channels, prod, paused, stop, |s| {
-        (s as f32 - 32768.0) / 32768.0
-    });
-}
-
-fn write_mic_samples_with_convert<T, P: Producer<Item = f32>>(
+fn write_mic_samples<T, F, C>(
     data: &[T],
     channels: usize,
-    prod: &Arc<Mutex<P>>,
-    paused: &Arc<AtomicBool>,
     stop: &Arc<AtomicBool>,
-    mut convert: impl FnMut(T) -> f32,
+    paused: &Arc<AtomicBool>,
+    callback: &mut C,
+    convert: F,
 ) where
     T: Copy,
+    F: Fn(T) -> f32,
+    C: FnMut(f32),
 {
     if stop.load(Ordering::SeqCst) || paused.load(Ordering::SeqCst) {
         return;
     }
-    if let Ok(mut p) = prod.lock() {
-        if channels <= 1 {
-            for s in data {
-                let _ = p.try_push(convert(*s));
-            }
-            return;
+    
+    if channels <= 1 {
+        for s in data {
+            callback(convert(*s));
         }
+    } else {
+        // Downmix interleaved multi-channel input to mono for processing
         for frame in data.chunks(channels) {
             let mut sum = 0.0f32;
             for s in frame {
                 sum += convert(*s);
             }
-            let _ = p.try_push(sum / (channels as f32));
+            callback(sum / (channels as f32));
         }
     }
 }
@@ -455,10 +435,9 @@ fn select_mic_config(
         }
     }
 
-    // Fallback to default config with adjusted sample rate
-    let mut config = default.config();
-    config.sample_rate = cpal::SampleRate(desired_rate);
-    Ok((config, default_format))
+    // Fallback: return default config natively (likely 48k or 44.1k)
+    // We let our software resampler handle the rate conversion.
+    Ok((default.config(), default_format))
 }
 
 fn writer_loop(
@@ -466,6 +445,8 @@ fn writer_loop(
     sys_path: Option<PathBuf>,
     merged_path: Option<PathBuf>,
     sample_rate: u32,
+    channels: u16,
+    bitrate: Bitrate,
     mut cons_system: impl Consumer<Item = f32>,
     mut cons_mic: impl Consumer<Item = f32>,
     paused: Arc<AtomicBool>,
@@ -473,14 +454,14 @@ fn writer_loop(
     paused_accum_ms: Arc<Mutex<u64>>,
     pause_started_at: Arc<Mutex<Option<Instant>>>,
 ) -> Result<(), String> {
-    let mut mic_writer = Mp3StereoWriter::create(&mic_path, sample_rate)?;
+    let mut mic_writer = Mp3Writer::create(&mic_path, sample_rate, channels, bitrate)?;
     let mut sys_writer = if let Some(p) = &sys_path {
-        Some(Mp3StereoWriter::create(p, sample_rate)?)
+        Some(Mp3Writer::create(p, sample_rate, channels, bitrate)?)
     } else {
         None
     };
     let mut merged_writer = if let Some(p) = &merged_path {
-        Some(Mp3StereoWriter::create(p, sample_rate)?)
+        Some(Mp3Writer::create(p, sample_rate, channels, bitrate)?)
     } else {
         None
     };
@@ -494,9 +475,6 @@ fn writer_loop(
     }
 
     let mut total_frames = 0u64;
-    let mut system_samples = 0u64;
-    let mut mic_samples = 0u64;
-
     let mut mic_buf = Vec::with_capacity(2048);
     let mut sys_buf = Vec::with_capacity(2048);
 
@@ -540,22 +518,17 @@ fn writer_loop(
 
             if let Some(val) = m {
                 mic_writer.write_frame(val, val)?;
-                mic_samples += 1;
             }
 
             if let Some(w) = &mut sys_writer {
                 if let Some(val) = s {
                     w.write_frame(val, val)?;
-                    system_samples += 1;
                 }
             }
 
             if let Some(w) = &mut merged_writer {
                 let m_val = m.unwrap_or(0.0);
                 let s_val = s.unwrap_or(0.0);
-                // Mix sum with hard clamping to [-1.0, 1.0].
-                // This avoids 50% volume drop when only one source is active,
-                // while preventing numerical overflow before encoding.
                 let mixed = (m_val + s_val).max(-1.0).min(1.0);
                 w.write_frame(mixed, mixed)?;
             }
@@ -565,11 +538,10 @@ fn writer_loop(
     }
 
     eprintln!(
-        "[Writer] Finished: {} total loops, {} system samples, {} mic samples",
-        total_frames, system_samples, mic_samples
+        "[Writer] Finished: {} total loops",
+        total_frames
     );
 
-    // If we were paused at stop time, account for the final pause interval.
     if paused.load(Ordering::SeqCst) {
         if let Ok(mut pause_start) = pause_started_at.lock() {
             if let Some(t0) = pause_start.take() {

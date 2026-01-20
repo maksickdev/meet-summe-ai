@@ -1,3 +1,11 @@
+## [2026-01-20] - Recording Quality Settings
+### Added
+- **Recording Quality Options**: Added a setting to choose between "Quality Priority" (48kHz Stereo, 64kbps) and "Size Priority" (16kHz Mono, 32kbps).
+  - "Size Priority" significantly reduces file size for voice-only recordings.
+  - Implemented logic to handle different sample rates and channels in the recording backend.
+  - Added frontend UI in `SettingsDialog` to select recording quality.
+  - Updated IPC commands to support getting/setting quality preference.
+
 ## [2026-01-20] - Window Configuration & Branding
 ### Changed
 - Set minimum window dimensions to 800x600 in `tauri.conf.json` to prevent layout issues.

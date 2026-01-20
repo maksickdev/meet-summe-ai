@@ -168,6 +168,7 @@ This keeps data portable and Obsidian-friendly.
 - `gemini_api_key`: API key for summarization.
 - `merge_audio_files`: Boolean toggle for creating merged MP3.
 - `preferred_mic_name`: Last used microphone name.
+- `recording_quality`: Preference for recording quality ("quality" or "size").
 
 ## UI (MVP screens)
 

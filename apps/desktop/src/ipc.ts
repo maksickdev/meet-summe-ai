@@ -100,3 +100,11 @@ export async function getPreferredMic(): Promise<string | null> {
 export async function setPreferredMic(name: string | null): Promise<void> {
   await invoke<void>("set_preferred_mic", { name });
 }
+
+export async function getRecordingQuality(): Promise<string> {
+  return await invoke<string>("get_recording_quality");
+}
+
+export async function setRecordingQuality(quality: string): Promise<void> {
+  await invoke<void>("set_recording_quality", { quality });
+}

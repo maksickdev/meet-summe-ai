@@ -22,6 +22,8 @@ import {
   startRecording,
   stopRecording,
   summarizeRecording,
+  getRecordingQuality,
+  setRecordingQuality,
 } from "./ipc";
 
 import type { RecordingMetadata } from "./types/recording";
@@ -62,6 +64,7 @@ export default function App() {
   const [templateId, setTemplateId] = useState<string>("meeting_notes");
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
   const [mergeEnabled, setMergeEnabledState] = useState<boolean>(false);
+  const [recordingQuality, setRecordingQualityState] = useState<string>("quality");
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
@@ -98,14 +101,16 @@ export default function App() {
       hasGeminiApiKey(),
       getMergeAudioFiles(),
       getPreferredMic(),
+      getRecordingQuality(),
     ])
-      .then(async ([dir, recs, devs, keyPresent, merge, prefMic]) => {
+      .then(async ([dir, recs, devs, keyPresent, merge, prefMic, quality]) => {
         setStorageDirState(dir);
         setStorageDirDraft(dir);
         setRecordings(recs);
         setDevices(devs);
         setHasKey(keyPresent);
         setMergeEnabledState(merge);
+        setRecordingQualityState(quality);
         if (prefMic) {
           setMicDevice(prefMic);
         }
@@ -163,6 +168,16 @@ export default function App() {
     } catch (e) {
       console.error(e);
       setStatus(`Error saving merge setting: ${String(e)}`);
+    }
+  }
+
+  async function onChangeQuality(quality: string) {
+    setRecordingQualityState(quality);
+    try {
+      await setRecordingQuality(quality);
+    } catch (e) {
+      console.error(e);
+      setStatus(`Error saving quality setting: ${String(e)}`);
     }
   }
 
@@ -398,6 +413,9 @@ export default function App() {
             onApiKeyChange={setApiKey}
             onSaveApiKey={onSaveApiKey}
             onClearApiKey={onClearApiKey}
+
+            recordingQuality={recordingQuality}
+            onChangeQuality={onChangeQuality}
         />
         <ConfirmDialog
             open={deleteConfirmOpen}

@@ -61,11 +61,14 @@ fn do_start_recording(
         .map(|s| storage::abs_path(app, &s.relative_path))
         .transpose()?;
 
+    let quality = storage::get_recording_quality(app).unwrap_or_else(|_| "quality".to_string());
+
     let session = audio::recorder::RecordingSession::start(
         audio_path,
         system_audio_path,
         merged_audio_path,
         mic_name,
+        &quality,
     )?;
     *guard = Some(ActiveRecording {
         session,
@@ -323,6 +326,16 @@ fn set_preferred_mic(app: tauri::AppHandle, name: Option<String>) -> Result<(), 
     storage::set_preferred_mic(&app, name)
 }
 
+#[tauri::command]
+fn get_recording_quality(app: tauri::AppHandle) -> Result<String, String> {
+    storage::get_recording_quality(&app)
+}
+
+#[tauri::command]
+fn set_recording_quality(app: tauri::AppHandle, quality: String) -> Result<(), String> {
+    storage::set_recording_quality(&app, &quality)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -420,7 +433,9 @@ pub fn run() {
             get_merge_audio_files,
             set_merge_audio_files,
             get_preferred_mic,
-            set_preferred_mic
+            set_preferred_mic,
+            get_recording_quality,
+            set_recording_quality
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -34,6 +34,9 @@ interface SettingsDialogProps {
   onApiKeyChange: (val: string) => void;
   onSaveApiKey: () => void;
   onClearApiKey: () => void;
+
+  recordingQuality: string;
+  onChangeQuality: (val: string) => void;
 }
 
 export function SettingsDialog({
@@ -53,6 +56,8 @@ export function SettingsDialog({
   onApiKeyChange,
   onSaveApiKey,
   onClearApiKey,
+  recordingQuality,
+  onChangeQuality,
 }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -114,6 +119,19 @@ export function SettingsDialog({
                 onCheckedChange={onToggleMerge}
               />
               <Label htmlFor="merge-mode">Merge system audio & mic (Beta)</Label>
+            </div>
+            
+            <div className="space-y-3 pt-2">
+              <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                Recording Quality
+              </div>
+              <Select
+                value={recordingQuality}
+                onChange={(e) => onChangeQuality(e.target.value)}
+              >
+                <option value="quality">Quality Priority (48kHz, Stereo, 64kbps)</option>
+                <option value="size">Size Priority (16kHz, Mono, 32kbps)</option>
+              </Select>
             </div>
           </div>
 
