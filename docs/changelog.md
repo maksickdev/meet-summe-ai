@@ -4,6 +4,9 @@
 - Replaced the raster logo in the Header with an animated SVG logo (`logo-motion.svg`) for better visual appeal.
 - Increased header title font size to 38px for better brand visibility.
 
+### Fixed
+- Fixed TypeScript build errors (unused variables in `AudioPlayer.tsx` and `ConfirmDialog.tsx`).
+
 ## [2026-01-19] - UI Style Refinements
 ### Added
 - **Radix UI Integration**: Migrated entire UI component library to use Radix UI primitives for accessible and robust interactions.
