@@ -1,8 +1,8 @@
-# SumMe — Project Documentation
+# summe — Project Documentation
 
 ## Purpose
 
-SumMe is a lightweight, privacy-oriented, cross-platform desktop application that records **system audio + microphone** and produces **transcripts and structured summaries** using **Google Gemini**, exporting results into clean **Markdown** files.
+summe is a lightweight, privacy-oriented, cross-platform desktop application that records **system audio + microphone** and produces **transcripts and structured summaries** using **Google Gemini**, exporting results into clean **Markdown** files.
 
 ## Goals
 
@@ -60,7 +60,7 @@ Implementation lives under `apps/desktop`:
 
 ## Architecture overview
 
-SumMe uses a **Tauri** application shell:
+summe uses a **Tauri** application shell:
 
 - **Frontend (React)**: UI, player, list of recordings, markdown preview/editor, settings.
 - **Backend (Rust)**: audio capture, encoding, filesystem operations, OS integrations (tray, shortcuts), Gemini requests (option A) or secure IPC bridge (option B).

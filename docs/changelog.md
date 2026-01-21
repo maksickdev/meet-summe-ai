@@ -1,7 +1,7 @@
 ## [2026-01-22] - Close to Tray
 ### Added
 - **Minimize to System Tray**: The application now minimizes to the system tray instead of closing when the window's close button is clicked.
-- **Show App from Tray**: Added a "Show SumMe" item to the tray menu and implemented a left-click handler on the tray icon to quickly restore the window.
+- **Show App from Tray**: Added a "Show summe" item to the tray menu and implemented a left-click handler on the tray icon to quickly restore the window.
 
 ## [2026-01-21] - Recording Timer & Status
 ### Added

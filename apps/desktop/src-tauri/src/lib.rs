@@ -1,4 +1,4 @@
-//! Tauri backend for SumMe.
+//! Tauri backend for summe.
 //!
 //! The MVP focuses on:
 //! - Native Rust audio capture (system output + microphone)
@@ -108,7 +108,7 @@ fn do_start_recording(
     let _ = app.notification()
         .builder()
         .title("Recording Started")
-        .body("SumMe is recording your audio...")
+        .body("summe is recording your audio...")
         .show();
 
     if let Err(e) = app.emit("recording-started", &meta) {
@@ -434,7 +434,7 @@ pub fn run() {
             _ => {}
         })
         .setup(|app| {
-            let show_i = MenuItem::with_id(app, "show", "Show SumMe", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Show summe", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let start_i = MenuItem::with_id(app, "start", "Start Recording", true, None::<&str>)?;
             let stop_i = MenuItem::with_id(app, "stop", "Stop Recording", true, None::<&str>)?;

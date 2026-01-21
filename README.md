@@ -1,4 +1,4 @@
-# SumMe (Summerizer)
+# summe (Summerizer)
 
 Private, cross-platform desktop app to **record system audio + microphone** and generate **high-quality transcripts and summaries** using **Google Gemini**, exported as beautiful **Markdown**.
 

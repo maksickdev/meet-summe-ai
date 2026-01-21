@@ -3,8 +3,8 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>SumMe needs access to your microphone to record your voice notes.</string>
+	<string>summe needs access to your microphone to record your voice notes.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>SumMe needs access to system audio to record meeting output.</string>
+	<string>summe needs access to system audio to record meeting output.</string>
 </dict>
 </plist>
