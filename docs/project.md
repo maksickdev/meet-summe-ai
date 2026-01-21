@@ -30,6 +30,7 @@ SumMe is a lightweight, privacy-oriented, cross-platform desktop application tha
   - Microphone: `cpal`
   - System output (native): `qruhear` (uses `screencapturekit` on macOS, `cpal` on Windows/Linux)
   - Buffering: `ringbuf`
+  - Processing: `webrtc-audio-processing` 0.5.0 (AEC, Noise Suppression, AGC)
   - Encoding: `mp3lame-encoder` (MP3)
 - **Gemini integration**: Rust (`reqwest`) via REST API
 - **Local storage**: filesystem + JSON metadata, `settings.json` for configuration

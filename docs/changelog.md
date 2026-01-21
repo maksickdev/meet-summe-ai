@@ -1,5 +1,7 @@
 ## [2026-01-21] - Recording Timer & Status
 ### Added
+- **Acoustic Echo Cancellation (AEC)**: Integrated WebRTC audio processing engine (version 0.5.0) to remove system audio leakage from the microphone track, preventing echo when using speakers.
+- **Improved Audio Processing Pipeline**: Added logic for real-time echo cancellation, noise suppression, and automatic gain control (AGC) using the `webrtc-audio-processing` crate.
 - **Recording Timer**: Implemented a real-time timer in the Header showing the current recording duration in `HH:MM:SS` format.
 - **Visual Status Indicators**: 
   - Pulsing red dot indicator when recording.
@@ -15,6 +17,7 @@
 
 
 ### Fixed
+- **Build Configuration**: Fixed a build error where multiple binaries in `Cargo.toml` prevented Tauri from identifying the main entry point. Removed temporary test binaries.
 - **Audio Sync**: Fixed a synchronization issue where the merged audio file (`mic` + `system`) would become distorted and desynchronized due to uneven buffering. The writer loop now correctly processes the common available length from both streams in lockstep, preventing silence insertion and drift.
 - **Tray Timer Persistence**: Fixed a race condition where the tray timer would fail to clear after stopping the recording.
 - **Startup Crash**: Fixed a crash caused by incorrect configuration of `tauri-plugin-notification`.

@@ -12,6 +12,7 @@ Private, cross-platform desktop app to **record system audio + microphone** and 
 - **Background Control**: System Tray icon and Global Hotkey (`Cmd+Shift+R` / `Ctrl+Shift+R`).
 - **AI Powered**: Summarize recordings with Google Gemini using custom templates.
 - **Notes**: Read and edit generated Markdown notes directly in the app.
+- **Integrated AEC**: Built-in Acoustic Echo Cancellation (WebRTC) to remove system sound from your voice track.
 - **Privacy First**: All data stored locally. API keys stored in local settings.
 
 ## Tech Stack

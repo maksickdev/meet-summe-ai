@@ -10,6 +10,10 @@ use ringbuf::traits::{Consumer, Producer, Split};
 
 use crate::audio::device;
 use crate::audio::writer::Mp3Writer;
+use webrtc_audio_processing::{
+    Config, EchoCancellation, EchoCancellationSuppressionLevel, GainControl, GainControlMode,
+    InitializationConfig, NoiseSuppression, NoiseSuppressionLevel, Processor,
+};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RecordingResult {
@@ -479,6 +483,36 @@ fn writer_loop(
     let mut mic_buf = Vec::with_capacity(4096);
     let mut sys_buf = Vec::with_capacity(4096);
 
+    // 10ms chunk size for WebRTC processing
+    let chunk_size = (sample_rate / 100) as usize;
+    let mut processor = Processor::new(&InitializationConfig {
+        num_capture_channels: 1,
+        num_render_channels: 1,
+        ..Default::default()
+    }).map_err(|e| format!("Failed to initialize WebRTC processor: {:?}", e))?;
+
+    processor.set_config(Config {
+        echo_cancellation: Some(EchoCancellation {
+            suppression_level: EchoCancellationSuppressionLevel::Moderate,
+            enable_extended_filter: true,
+            enable_delay_agnostic: true,
+            stream_delay_ms: None,
+        }),
+        noise_suppression: Some(NoiseSuppression {
+            suppression_level: NoiseSuppressionLevel::High,
+        }),
+        gain_control: Some(GainControl {
+            mode: GainControlMode::AdaptiveDigital,
+            target_level_dbfs: 3,
+            compression_gain_db: 9,
+            enable_limiter: true,
+        }),
+        ..Default::default()
+    });
+
+    let mut render_frame = vec![0.0f32; chunk_size];
+    let mut capture_frame = vec![0.0f32; chunk_size];
+
     while !stop.load(Ordering::SeqCst) {
         if paused.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(20));
@@ -486,12 +520,8 @@ fn writer_loop(
         }
 
         // 1. Drain ringbuffers into local vectors
-        // We limit the read to a reasonable chunk size to avoid locking the thread too long,
-        // but we assume the ringbuffers are sized to hold enough backpressure.
         while let Some(s) = cons_mic.try_pop() {
             mic_buf.push(s);
-            // Cap to avoid infinite growth if system is dead. 
-            // 48000 samples = 1 sec. If we drift more than 1s, we have bigger problems.
             if mic_buf.len() > 192_000 { break; } 
         }
         while let Some(s) = cons_system.try_pop() {
@@ -499,50 +529,57 @@ fn writer_loop(
             if sys_buf.len() > 192_000 { break; }
         }
 
-        // 2. Determine common length to process
-        // We sync by consuming only what is available in BOTH (if both are required).
-        // Actually, 'sys_writer' and 'mic_writer' are independent.
-        // BUT 'merged_writer' needs both. 
-        // If we want strict sync for the merged file, we must process them in lockstep.
-        
-        let common_len = mic_buf.len().min(sys_buf.len());
+        // 2. Process in 10ms chunks
+        while mic_buf.len() >= chunk_size && sys_buf.len() >= chunk_size {
+            // Fill frames
+            render_frame.copy_from_slice(&sys_buf[0..chunk_size]);
+            capture_frame.copy_from_slice(&mic_buf[0..chunk_size]);
 
-        if common_len == 0 {
-             // Wait for more data
-             std::thread::sleep(Duration::from_millis(5));
-             continue;
-        }
-
-        // 3. Write frames
-        let mic_gain = 2.5f32;
-        let sys_gain = 0.8f32;
-
-        for i in 0..common_len {
-            let m_orig = mic_buf[i];
-            let s_orig = sys_buf[i];
-
-            // Boost microphone and clamp to prevent clipping in the standalone file
-            let m_boosted = (m_orig * mic_gain).max(-1.0).min(1.0);
-
-            mic_writer.write_frame(m_boosted, m_boosted)?;
-
-            if let Some(w) = &mut sys_writer {
-                w.write_frame(s_orig, s_orig)?;
+            // WebRTC AEC: 
+            // - Process render (system) frame as reference
+            // - Process capture (mic) frame to remove echo
+            if let Err(e) = processor.process_render_frame(&mut render_frame) {
+                eprintln!("[Writer] AEC render error: {:?}", e);
+            }
+            if let Err(e) = processor.process_capture_frame(&mut capture_frame) {
+                eprintln!("[Writer] AEC capture error: {:?}", e);
             }
 
-            if let Some(w) = &mut merged_writer {
-                // Mix boosted mic with slightly attenuated system audio
-                let mixed = (m_boosted + s_orig * sys_gain).max(-1.0).min(1.0);
-                w.write_frame(mixed, mixed)?;
+            // 3. Write frames with gains
+            let mic_gain = 2.5f32;
+            let sys_gain = 0.8f32;
+
+            for i in 0..chunk_size {
+                let m_clean = capture_frame[i];
+                let s_orig = sys_buf[i];
+
+                // Standalone Mic file (already echo-cancelled + noise-suppressed)
+                let m_boosted = (m_clean * mic_gain).max(-1.0).min(1.0);
+                mic_writer.write_frame(m_boosted, m_boosted)?;
+
+                // Standalone System file
+                if let Some(w) = &mut sys_writer {
+                    w.write_frame(s_orig, s_orig)?;
+                }
+
+                // Merged file
+                if let Some(w) = &mut merged_writer {
+                    let mixed = (m_boosted + s_orig * sys_gain).max(-1.0).min(1.0);
+                    w.write_frame(mixed, mixed)?;
+                }
             }
+
+            total_frames += chunk_size as u64;
+
+            // 4. Remove processed samples
+            mic_buf.drain(0..chunk_size);
+            sys_buf.drain(0..chunk_size);
         }
 
-        total_frames += common_len as u64;
-
-        // 4. Remove processed samples
-        // drain(0..common_len) removes the start and shifts the rest.
-        mic_buf.drain(0..common_len);
-        sys_buf.drain(0..common_len);
+        // Small sleep if not enough data for a chunk
+        if mic_buf.len() < chunk_size || sys_buf.len() < chunk_size {
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 
     eprintln!(
