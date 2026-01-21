@@ -73,7 +73,7 @@ SumMe uses a **Tauri** application shell:
   - post-process results into Markdown format
 - **Metadata Store**: persistent index of recordings (JSON) + settings (store plugin or JSON).
 - **UI Layer**: recording controls, status/progress, playback, preview, editing, export.
-- **OS Integrations**: tray status, global shortcuts, notifications, auto-start (post-MVP).
+- **OS Integrations**: tray status (timer, dynamic menu), global shortcuts, notifications.
 
 ### Data flow (record → summarize)
 
@@ -234,6 +234,6 @@ Each template should define:
 
 ## Roadmap (high level)
 
-- **MVP**: recording + summarize + markdown output + tray/hotkeys
+- **MVP**: recording + summarize + markdown output + tray/hotkeys + notifications
 - **1.0**: quality presets, language selection, templates UI, export integrations, theming, notifications
 - **Post-1.0**: search, tags/projects, cloud mode, team features, calendar integrations, mobile

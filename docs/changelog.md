@@ -5,6 +5,14 @@
   - Pulsing red dot indicator when recording.
   - Solid amber dot indicator when paused.
 - **Timer Logic**: Added robust timer state management in `App.tsx` to handle start, pause, resume, and stop events correctly, including external triggers from tray/shortcuts.
+- **Tray enhancements**:
+  - **Dynamic Menu**: Start/Stop menu items now toggle based on recording state.
+  - **Tray Timer**: Tray icon title now shows the recording duration in real-time.
+- **System Notifications**: Added native OS notifications for "Recording Started" and "Recording Saved".
+
+### Fixed
+- **Tray Timer Persistence**: Fixed a race condition where the tray timer would fail to clear after stopping the recording.
+- **Startup Crash**: Fixed a crash caused by incorrect configuration of `tauri-plugin-notification`.
 
 ## [2026-01-20] - Recording Quality Settings
 ### Added

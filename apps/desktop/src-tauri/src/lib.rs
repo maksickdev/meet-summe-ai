@@ -9,14 +9,17 @@ mod gemini;
 mod storage;
 
 use parking_lot::Mutex;
-use std::sync::Arc;
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
+use std::thread;
+use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent, TrayIcon},
     Emitter,
     Manager,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_notification::NotificationExt;
 
 struct ActiveRecording {
     session: audio::recorder::RecordingSession,
@@ -26,7 +29,29 @@ struct ActiveRecording {
 #[derive(Default)]
 struct AppState {
     recording: Mutex<Option<ActiveRecording>>,
+    tray_icon: Mutex<Option<TrayIcon>>,
+    tray_menu: Mutex<Option<Menu<tauri::Wry>>>,
+    is_recording: Arc<AtomicBool>,
 }
+
+fn update_tray_menu(app: &tauri::AppHandle, is_recording: bool) {
+    let state = app.state::<AppState>();
+    if let Some(menu) = state.tray_menu.lock().as_ref() {
+         if let Some(tauri::menu::MenuItemKind::MenuItem(start_i)) = menu.get("start") {
+             let _ = start_i.set_enabled(!is_recording);
+         }
+         if let Some(tauri::menu::MenuItemKind::MenuItem(stop_i)) = menu.get("stop") {
+             let _ = stop_i.set_enabled(is_recording);
+         }
+    }
+    
+        if !is_recording {
+        if let Some(tray) = state.tray_icon.lock().as_ref() {
+             let _ = tray.set_title(Some(""));
+        }
+    }
+}
+
 
 fn do_start_recording(
     app: &tauri::AppHandle,
@@ -75,9 +100,59 @@ fn do_start_recording(
         meta: meta.clone(),
     });
 
+    // Update state and UI
+    state.is_recording.store(true, Ordering::SeqCst);
+    update_tray_menu(app, true);
+
+    // Send notification
+    let _ = app.notification()
+        .builder()
+        .title("Recording Started")
+        .body("SumMe is recording your audio...")
+        .show();
+
     if let Err(e) = app.emit("recording-started", &meta) {
         eprintln!("Failed to emit recording-started event: {}", e);
     }
+
+    // Spawn tray timer thread
+    let is_recording = state.is_recording.clone();
+    let app_handle = app.clone();
+    let start_time = std::time::Instant::now();
+    
+    thread::spawn(move || {
+        while is_recording.load(Ordering::SeqCst) {
+             let elapsed = start_time.elapsed();
+             let secs = elapsed.as_secs();
+             let h = secs / 3600;
+             let m = (secs % 3600) / 60;
+             let s = secs % 60;
+             let title = format!("{:02}:{:02}:{:02}", h, m, s);
+             
+             let state = app_handle.state::<AppState>();
+             
+             // Check again to avoid race with stop_recording
+             if !is_recording.load(Ordering::SeqCst) {
+                 println!("[Tray] Loop explicitly breaking");
+                 break;
+             }
+
+             if let Some(tray) = state.tray_icon.lock().as_ref() {
+                 let _ = tray.set_title(Some(title));
+             }
+             
+             thread::sleep(Duration::from_millis(1000));
+        }
+        
+        println!("[Tray] Timer thread exiting");
+        // Ensure title is cleared when thread exits
+        let state = app_handle.state::<AppState>();
+        let guard = state.tray_icon.lock();
+        if let Some(tray) = guard.as_ref() {
+             println!("[Tray] Clearing title");
+             let _ = tray.set_title(Some(""));
+        }
+    });
 
     Ok(meta)
 }
@@ -112,6 +187,17 @@ fn do_stop_recording(
 
     storage::save_recording_metadata(app, &meta)?;
     
+    // Update state and UI
+    state.is_recording.store(false, Ordering::SeqCst);
+    update_tray_menu(app, false);
+
+    // Send notification
+    let _ = app.notification()
+        .builder()
+        .title("Recording Saved")
+        .body("Your recording has been saved successfully.")
+        .show();
+
     if let Err(e) = app.emit("recording-stopped", &meta) {
         eprintln!("Failed to emit recording-stopped event: {}", e);
     }
@@ -339,13 +425,17 @@ fn set_recording_quality(app: tauri::AppHandle, quality: String) -> Result<(), S
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let start_i = MenuItem::with_id(app, "start", "Start Recording", true, None::<&str>)?;
             let stop_i = MenuItem::with_id(app, "stop", "Stop Recording", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&start_i, &stop_i, &quit_i])?;
+            
+            // Initial menu state: stop disabled
+            let _ = stop_i.set_enabled(false);
 
-            let _tray = TrayIconBuilder::new()
+            let tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .icon(app.default_window_icon().unwrap().clone())
@@ -357,6 +447,10 @@ pub fn run() {
                         let state = app.state::<AppState>();
                         if let Err(e) = do_start_recording(app, &state, None) {
                             eprintln!("Failed to start recording from tray: {}", e);
+                            let _ = app.notification().builder()
+                                .title("Error")
+                                .body(&format!("Failed to start recording: {}", e))
+                                .show();
                         } else {
                             println!("Started recording from tray");
                         }
@@ -365,6 +459,10 @@ pub fn run() {
                         let state = app.state::<AppState>();
                         if let Err(e) = do_stop_recording(app, &state) {
                             eprintln!("Failed to stop recording from tray: {}", e);
+                            let _ = app.notification().builder()
+                                .title("Error")
+                                .body(&format!("Failed to stop recording: {}", e))
+                                .show();
                         } else {
                             println!("Stopped recording from tray");
                         }
@@ -372,6 +470,11 @@ pub fn run() {
                     _ => {}
                 })
                 .build(app)?;
+            
+            // Store tray handle and menu
+            let state = app.state::<AppState>();
+            *state.tray_icon.lock() = Some(tray);
+            *state.tray_menu.lock() = Some(menu);
 
             // Global Shortcut: Cmd+Shift+R (or Ctrl+Shift+R)
             #[cfg(target_os = "macos")]
@@ -440,3 +543,4 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
