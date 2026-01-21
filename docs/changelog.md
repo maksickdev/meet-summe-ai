@@ -1,3 +1,11 @@
+## [2026-01-21] - Recording Timer & Status
+### Added
+- **Recording Timer**: Implemented a real-time timer in the Header showing the current recording duration in `HH:MM:SS` format.
+- **Visual Status Indicators**: 
+  - Pulsing red dot indicator when recording.
+  - Solid amber dot indicator when paused.
+- **Timer Logic**: Added robust timer state management in `App.tsx` to handle start, pause, resume, and stop events correctly, including external triggers from tray/shortcuts.
+
 ## [2026-01-20] - Recording Quality Settings
 ### Added
 - **Recording Quality Options**: Added a setting to choose between "Quality Priority" (48kHz Stereo, 64kbps) and "Size Priority" (16kHz Mono, 32kbps).

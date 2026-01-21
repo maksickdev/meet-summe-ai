@@ -1,5 +1,6 @@
 import { Settings, Mic, Square, Play, Pause } from "lucide-react";
 import logo from "../assets/logo-motion.svg";
+import { RecordingTimer } from "./RecordingTimer";
 
 interface HeaderProps {
   recState: "idle" | "recording" | "paused";
@@ -8,6 +9,8 @@ interface HeaderProps {
   onResume: () => void;
   onStop: () => void;
   onOpenSettings: () => void;
+  segmentStartTime: number | null;
+  baseDuration: number;
 }
 
 export function Header({
@@ -17,6 +20,8 @@ export function Header({
   onResume,
   onStop,
   onOpenSettings,
+  segmentStartTime,
+  baseDuration,
 }: HeaderProps) {
   const isIdle = recState === "idle";
   const isRecording = recState === "recording";
@@ -42,28 +47,35 @@ export function Header({
           </button>
         ) : (
           <>
-            <div className="px-3 text-xs font-mono text-zinc-500 animate-pulse">
-              {isRecording ? "REC ●" : "PAUSED"}
+            <div className="flex items-center gap-2 px-3 text-sm font-medium text-zinc-700 dark:text-zinc-200 min-w-[120px] justify-center">
+              <div
+                className={`h-2.5 w-2.5 rounded-full ${isRecording ? "bg-red-500 animate-pulse" : "bg-amber-400"}`}
+              />
+              <RecordingTimer
+                baseDuration={baseDuration}
+                segmentStartTime={segmentStartTime}
+                isRunning={isRecording}
+              />
             </div>
-            
+
             {isRecording && (
-               <button
-                 onClick={onPause}
-                 className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200 text-zinc-700 transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                 title="Pause"
-               >
-                 <Pause className="h-4 w-4 fill-current" />
-               </button>
+              <button
+                onClick={onPause}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200 text-zinc-700 transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                title="Pause"
+              >
+                <Pause className="h-4 w-4 fill-current" />
+              </button>
             )}
 
             {isPaused && (
-               <button
-                 onClick={onResume}
-                 className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200 text-zinc-700 transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                 title="Resume"
-               >
-                 <Play className="h-4 w-4 fill-current" />
-               </button>
+              <button
+                onClick={onResume}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200 text-zinc-700 transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                title="Resume"
+              >
+                <Play className="h-4 w-4 fill-current" />
+              </button>
             )}
 
             <button
@@ -87,3 +99,4 @@ export function Header({
     </header>
   );
 }
+

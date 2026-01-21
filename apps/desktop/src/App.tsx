@@ -59,6 +59,10 @@ export default function App() {
   const [recState, setRecState] = useState<"idle" | "recording" | "paused">("idle");
   const [status, setStatus] = useState<string>(""); // Kept for debugging/toasts if needed later
 
+  // --- Timer State ---
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [accumulatedDuration, setAccumulatedDuration] = useState<number>(0);
+
   const [hasKey, setHasKey] = useState<boolean>(false);
   const [apiKey, setApiKey] = useState<string>("");
   const [templateId, setTemplateId] = useState<string>("meeting_notes");
@@ -67,7 +71,7 @@ export default function App() {
   const [recordingQuality, setRecordingQualityState] = useState<string>("quality");
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  
+
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [recordingToDelete, setRecordingToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -136,6 +140,9 @@ export default function App() {
         setRecState("recording");
         setSelectedId(event.payload.id);
         setStatus("Recording started (external).");
+        // External start - we might not have exact sync but we can start counting
+        setStartTime(Date.now());
+        setAccumulatedDuration(0);
       }),
       listen<RecordingMetadata>("recording-stopped", (event) => {
         console.log("External stop", event);
@@ -143,6 +150,8 @@ export default function App() {
         refreshRecordings().then(() => {
           setSelectedId(event.payload.id);
           setStatus("Recording stopped (external).");
+          setStartTime(null);
+          setAccumulatedDuration(0);
         });
       }),
     ]).then((unlisteners) => {
@@ -186,7 +195,7 @@ export default function App() {
     try {
       await setPreferredMic(name || null);
     } catch (e) {
-        console.error(e);
+      console.error(e);
       setStatus(`Error saving mic preference: ${String(e)}`);
     }
   }
@@ -217,7 +226,7 @@ export default function App() {
       setHasKey(keyPresent);
       setStatus(`Gemini API key saved successfully! ✓`);
     } catch (e) {
-        console.error(e);
+      console.error(e);
       setStatus(`Gemini key error: ${String(e)}`);
     }
   }
@@ -229,7 +238,7 @@ export default function App() {
       setApiKey("");
       setStatus("Gemini API key cleared.");
     } catch (e) {
-        console.error(e);
+      console.error(e);
       setStatus(`Gemini key error: ${String(e)}`);
     }
   }
@@ -240,8 +249,10 @@ export default function App() {
       setRecState("recording");
       setSelectedId(meta.id);
       setStatus("Recording started.");
+      setStartTime(Date.now());
+      setAccumulatedDuration(0);
     } catch (e) {
-        console.error(e);
+      console.error(e);
       setStatus(`Start error: ${String(e)}`);
     }
   }
@@ -251,8 +262,12 @@ export default function App() {
       await pauseRecording();
       setRecState("paused");
       setStatus("Recording paused.");
+      if (startTime) {
+        setAccumulatedDuration((prev) => prev + (Date.now() - startTime));
+        setStartTime(null);
+      }
     } catch (e) {
-        console.error(e);
+      console.error(e);
       setStatus(`Pause error: ${String(e)}`);
     }
   }
@@ -262,8 +277,9 @@ export default function App() {
       await resumeRecording();
       setRecState("recording");
       setStatus("Recording resumed.");
+      setStartTime(Date.now());
     } catch (e) {
-        console.error(e);
+      console.error(e);
       setStatus(`Resume error: ${String(e)}`);
     }
   }
@@ -275,8 +291,10 @@ export default function App() {
       await refreshRecordings();
       setSelectedId(meta.id);
       setStatus("Recording saved.");
+      setStartTime(null);
+      setAccumulatedDuration(0);
     } catch (e) {
-        console.error(e);
+      console.error(e);
       setStatus(`Stop error: ${String(e)}`);
     }
   }
@@ -289,7 +307,7 @@ export default function App() {
       }
       await showInFolder(selectedAbsAudioPath);
     } catch (e) {
-        console.error(e);
+      console.error(e);
       setStatus(`Open error: ${String(e)}`);
     }
   }
@@ -333,11 +351,11 @@ export default function App() {
   async function onSummarize() {
     if (!selected) return;
     if (!hasKey) {
-        setIsSettingsOpen(true);
-        setStatus("Please configure Gemini API key first.");
-        return;
+      setIsSettingsOpen(true);
+      setStatus("Please configure Gemini API key first.");
+      return;
     }
-    
+
     setIsSummarizing(true);
     try {
       setStatus("Summarizing with Gemini...");
@@ -346,7 +364,7 @@ export default function App() {
       setSelectedId(updated.id);
       setStatus("Summarization complete! Markdown saved.");
     } catch (e) {
-        console.error(e);
+      console.error(e);
       setStatus(`Summarize error: ${String(e)}`);
     } finally {
       setIsSummarizing(false);
@@ -357,74 +375,76 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-white text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 shadow-2xl">
-        <Header 
-            recState={recState}
-            onStart={onStart}
-            onPause={onPause}
-            onResume={onResume}
-            onStop={onStop}
-            onOpenSettings={() => setIsSettingsOpen(true)}
+      <Header
+        recState={recState}
+        onStart={onStart}
+        onPause={onPause}
+        onResume={onResume}
+        onStop={onStop}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        segmentStartTime={startTime}
+        baseDuration={accumulatedDuration}
+      />
+      <AppLayout
+        sidebar={
+          <Sidebar
+            recordings={recordings}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onDelete={onDelete}
+            onRename={onRename}
+          />
+        }
+      >
+        <MainContent
+          selected={selected}
+          storageDir={storageDir}
+          hasKey={hasKey}
+          isSummarizing={isSummarizing}
+          templateId={templateId}
+          onTemplateChange={setTemplateId}
+          onSummarize={onSummarize}
+          onShowInFolder={onShowInFolder}
         />
-        <AppLayout
-            sidebar={
-                <Sidebar 
-                    recordings={recordings} 
-                    selectedId={selectedId} 
-                    onSelect={setSelectedId}
-                    onDelete={onDelete}
-                    onRename={onRename}
-                />
-            }
-        >
-            <MainContent
-                selected={selected}
-                storageDir={storageDir}
-                hasKey={hasKey}
-                isSummarizing={isSummarizing}
-                templateId={templateId}
-                onTemplateChange={setTemplateId}
-                onSummarize={onSummarize}
-                onShowInFolder={onShowInFolder}
-            />
-        </AppLayout>
+      </AppLayout>
 
-        <div className="bg-zinc-50 p-2 text-xs text-zinc-500 dark:bg-zinc-900 truncate h-[33px]" title={status}>
-          {status}
-        </div>
+      <div className="bg-zinc-50 p-2 text-xs text-zinc-500 dark:bg-zinc-900 truncate h-[33px]" title={status}>
+        {status}
+      </div>
 
-        <SettingsDialog 
-            open={isSettingsOpen}
-            onOpenChange={setIsSettingsOpen}
-            
-            storageDir={storageDir}
-            storageDirDraft={storageDirDraft}
-            onStorageDirDraftChange={setStorageDirDraft}
-            onSaveStorage={onSaveStorage}
-            
-            micDevice={micDevice}
-            devices={devices}
-            onChangeMic={onChangeMic}
-            
-            mergeEnabled={mergeEnabled}
-            onToggleMerge={onToggleMerge}
-            
-            apiKey={apiKey}
-            hasKey={hasKey}
-            onApiKeyChange={setApiKey}
-            onSaveApiKey={onSaveApiKey}
-            onClearApiKey={onClearApiKey}
+      <SettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
 
-            recordingQuality={recordingQuality}
-            onChangeQuality={onChangeQuality}
-        />
-        <ConfirmDialog
-            open={deleteConfirmOpen}
-            onOpenChange={setDeleteConfirmOpen}
-            title="Delete Recording"
-            description="Are you sure you want to delete this recording? This action cannot be undone."
-            onConfirm={confirmDelete}
-            isLoading={isDeleting}
-        />
+        storageDir={storageDir}
+        storageDirDraft={storageDirDraft}
+        onStorageDirDraftChange={setStorageDirDraft}
+        onSaveStorage={onSaveStorage}
+
+        micDevice={micDevice}
+        devices={devices}
+        onChangeMic={onChangeMic}
+
+        mergeEnabled={mergeEnabled}
+        onToggleMerge={onToggleMerge}
+
+        apiKey={apiKey}
+        hasKey={hasKey}
+        onApiKeyChange={setApiKey}
+        onSaveApiKey={onSaveApiKey}
+        onClearApiKey={onClearApiKey}
+
+        recordingQuality={recordingQuality}
+        onChangeQuality={onChangeQuality}
+      />
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Delete Recording"
+        description="Are you sure you want to delete this recording? This action cannot be undone."
+        onConfirm={confirmDelete}
+        isLoading={isDeleting}
+      />
     </div>
   );
 }

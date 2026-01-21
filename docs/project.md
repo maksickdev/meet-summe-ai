@@ -174,7 +174,7 @@ This keeps data portable and Obsidian-friendly.
 
 - **Layout**:
   - **Sidebar (Left)**: Scrollable list of recordings with metadata (date, duration). Supports right-click context menu for Rename/Delete.
-  - **Header (Top)**: Global recording controls (Start/Stop/Pause), status indicator, and Settings trigger.
+  - **Header (Top)**: Global recording controls (Start/Stop/Pause), real-time recording timer (`HH:MM:SS`), status indicator (pulsing red/solid amber), and Settings trigger.
   - **Main Content (Right)**:
     - **Audio Player**: Multi-track playback (Mic, System, Merged).
     - **Summarization**: Controls to generate AI summaries.
