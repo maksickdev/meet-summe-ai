@@ -10,7 +10,12 @@
   - **Tray Timer**: Tray icon title now shows the recording duration in real-time.
 - **System Notifications**: Added native OS notifications for "Recording Started" and "Recording Saved".
 
+### Changed
+- **Audio Balancing**: Applied a 2.5x gain boost to the microphone track and slightly attenuated system audio (0.8x) in the merged recording to ensure voice clarity.
+
+
 ### Fixed
+- **Audio Sync**: Fixed a synchronization issue where the merged audio file (`mic` + `system`) would become distorted and desynchronized due to uneven buffering. The writer loop now correctly processes the common available length from both streams in lockstep, preventing silence insertion and drift.
 - **Tray Timer Persistence**: Fixed a race condition where the tray timer would fail to clear after stopping the recording.
 - **Startup Crash**: Fixed a crash caused by incorrect configuration of `tauri-plugin-notification`.
 

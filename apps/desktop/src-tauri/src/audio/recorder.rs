@@ -475,8 +475,9 @@ fn writer_loop(
     }
 
     let mut total_frames = 0u64;
-    let mut mic_buf = Vec::with_capacity(2048);
-    let mut sys_buf = Vec::with_capacity(2048);
+    // Buffers to hold incoming samples until we have enough to sync
+    let mut mic_buf = Vec::with_capacity(4096);
+    let mut sys_buf = Vec::with_capacity(4096);
 
     while !stop.load(Ordering::SeqCst) {
         if paused.load(Ordering::SeqCst) {
@@ -484,61 +485,68 @@ fn writer_loop(
             continue;
         }
 
-        mic_buf.clear();
-        sys_buf.clear();
-
-        // Read up to 2048 samples from mic
-        for _ in 0..2048 {
-            if let Some(s) = cons_mic.try_pop() {
-                mic_buf.push(s);
-            } else {
-                break;
-            }
+        // 1. Drain ringbuffers into local vectors
+        // We limit the read to a reasonable chunk size to avoid locking the thread too long,
+        // but we assume the ringbuffers are sized to hold enough backpressure.
+        while let Some(s) = cons_mic.try_pop() {
+            mic_buf.push(s);
+            // Cap to avoid infinite growth if system is dead. 
+            // 48000 samples = 1 sec. If we drift more than 1s, we have bigger problems.
+            if mic_buf.len() > 192_000 { break; } 
+        }
+        while let Some(s) = cons_system.try_pop() {
+            sys_buf.push(s);
+            if sys_buf.len() > 192_000 { break; }
         }
 
-        // Read up to 2048 samples from system
-        for _ in 0..2048 {
-            if let Some(s) = cons_system.try_pop() {
-                sys_buf.push(s);
-            } else {
-                break;
-            }
-        }
+        // 2. Determine common length to process
+        // We sync by consuming only what is available in BOTH (if both are required).
+        // Actually, 'sys_writer' and 'mic_writer' are independent.
+        // BUT 'merged_writer' needs both. 
+        // If we want strict sync for the merged file, we must process them in lockstep.
+        
+        let common_len = mic_buf.len().min(sys_buf.len());
 
-        let max_len = mic_buf.len().max(sys_buf.len());
-
-        if max_len == 0 {
+        if common_len == 0 {
+             // Wait for more data
              std::thread::sleep(Duration::from_millis(5));
              continue;
         }
 
-        for i in 0..max_len {
-            let m = mic_buf.get(i).copied();
-            let s = sys_buf.get(i).copied();
+        // 3. Write frames
+        let mic_gain = 2.5f32;
+        let sys_gain = 0.8f32;
 
-            if let Some(val) = m {
-                mic_writer.write_frame(val, val)?;
-            }
+        for i in 0..common_len {
+            let m_orig = mic_buf[i];
+            let s_orig = sys_buf[i];
+
+            // Boost microphone and clamp to prevent clipping in the standalone file
+            let m_boosted = (m_orig * mic_gain).max(-1.0).min(1.0);
+
+            mic_writer.write_frame(m_boosted, m_boosted)?;
 
             if let Some(w) = &mut sys_writer {
-                if let Some(val) = s {
-                    w.write_frame(val, val)?;
-                }
+                w.write_frame(s_orig, s_orig)?;
             }
 
             if let Some(w) = &mut merged_writer {
-                let m_val = m.unwrap_or(0.0);
-                let s_val = s.unwrap_or(0.0);
-                let mixed = (m_val + s_val).max(-1.0).min(1.0);
+                // Mix boosted mic with slightly attenuated system audio
+                let mixed = (m_boosted + s_orig * sys_gain).max(-1.0).min(1.0);
                 w.write_frame(mixed, mixed)?;
             }
         }
-        
-        total_frames += max_len as u64;
+
+        total_frames += common_len as u64;
+
+        // 4. Remove processed samples
+        // drain(0..common_len) removes the start and shifts the rest.
+        mic_buf.drain(0..common_len);
+        sys_buf.drain(0..common_len);
     }
 
     eprintln!(
-        "[Writer] Finished: {} total loops",
+        "[Writer] Finished: {} total frames written",
         total_frames
     );
 
