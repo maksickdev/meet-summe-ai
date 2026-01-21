@@ -74,7 +74,7 @@ SumMe uses a **Tauri** application shell:
   - post-process results into Markdown format
 - **Metadata Store**: persistent index of recordings (JSON) + settings (store plugin or JSON).
 - **UI Layer**: recording controls, status/progress, playback, preview, editing, export.
-- **OS Integrations**: tray status (timer, dynamic menu), global shortcuts, notifications.
+- **OS Integrations**: tray status (timer, dynamic menu), global shortcuts, notifications, close-to-tray logic.
 
 ### Data flow (record → summarize)
 

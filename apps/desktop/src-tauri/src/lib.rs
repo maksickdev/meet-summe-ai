@@ -426,20 +426,40 @@ fn set_recording_quality(app: tauri::AppHandle, quality: String) -> Result<(), S
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                window.hide().unwrap();
+                api.prevent_close();
+            }
+            _ => {}
+        })
         .setup(|app| {
+            let show_i = MenuItem::with_id(app, "show", "Show SumMe", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let start_i = MenuItem::with_id(app, "start", "Start Recording", true, None::<&str>)?;
             let stop_i = MenuItem::with_id(app, "stop", "Stop Recording", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&start_i, &stop_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[
+                &show_i,
+                &tauri::menu::PredefinedMenuItem::separator(app)?,
+                &start_i,
+                &stop_i,
+                &quit_i
+            ])?;
             
             // Initial menu state: stop disabled
             let _ = stop_i.set_enabled(false);
 
             let tray = TrayIconBuilder::new()
                 .menu(&menu)
-                .show_menu_on_left_click(true)
+                .show_menu_on_left_click(false) // We want to handle clicks manually or show menu on right-click
                 .icon(app.default_window_icon().unwrap().clone())
                 .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
                     "quit" => {
                         app.exit(0);
                     }
@@ -468,6 +488,19 @@ pub fn run() {
                         }
                     }
                     _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
                 })
                 .build(app)?;
             

@@ -9,7 +9,7 @@ Private, cross-platform desktop app to **record system audio + microphone** and 
 - **Record Everything**: System audio + Microphone simultaneously.
 - **High Quality**: 48kHz sampling, MP3 encoding (64kbps optimized for speech).
 - **Flexible**: Record separate tracks or merge them on the fly.
-- **Background Control**: System Tray icon and Global Hotkey (`Cmd+Shift+R` / `Ctrl+Shift+R`).
+- **Background Control**: System Tray icon and Global Hotkey (`Cmd+Shift+R` / `Ctrl+Shift+R`). Supports "Close to Tray" to keep application active.
 - **AI Powered**: Summarize recordings with Google Gemini using custom templates.
 - **Notes**: Read and edit generated Markdown notes directly in the app.
 - **Integrated AEC**: Built-in Acoustic Echo Cancellation (WebRTC) to remove system sound from your voice track.

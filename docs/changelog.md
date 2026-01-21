@@ -1,3 +1,8 @@
+## [2026-01-22] - Close to Tray
+### Added
+- **Minimize to System Tray**: The application now minimizes to the system tray instead of closing when the window's close button is clicked.
+- **Show App from Tray**: Added a "Show SumMe" item to the tray menu and implemented a left-click handler on the tray icon to quickly restore the window.
+
 ## [2026-01-21] - Recording Timer & Status
 ### Added
 - **Acoustic Echo Cancellation (AEC)**: Integrated WebRTC audio processing engine (version 0.5.0) to remove system audio leakage from the microphone track, preventing echo when using speakers.
