@@ -32,6 +32,34 @@ struct AppState {
     tray_icon: Mutex<Option<TrayIcon>>,
     tray_menu: Mutex<Option<Menu<tauri::Wry>>>,
     is_recording: Arc<AtomicBool>,
+    current_shortcut: Mutex<Option<Shortcut>>,
+    current_shortcut_str: Mutex<String>,
+    shortcuts_disabled: AtomicBool,
+}
+
+fn register_hotkey(app: &tauri::AppHandle, hotkey_str: &str) -> Result<(), String> {
+    use std::str::FromStr;
+    let state = app.state::<AppState>();
+    let shortcut = Shortcut::from_str(hotkey_str)
+        .map_err(|e| format!("Invalid shortcut format '{}': {}", hotkey_str, e))?;
+
+    println!("[Hotkey] Attempting to register: {}", hotkey_str);
+
+    // Unregister everything to be sure we only have one recording hotkey
+    let _ = app.global_shortcut().unregister_all();
+
+    // Register new
+    app.global_shortcut()
+        .register(shortcut.clone())
+        .map_err(|e| format!("Failed to register shortcut '{}': {}", hotkey_str, e))?;
+    
+    // Update both Shortcut object and string representation for match consistency
+    let normalized = shortcut.to_string();
+    *state.current_shortcut.lock() = Some(shortcut);
+    *state.current_shortcut_str.lock() = normalized.clone();
+    
+    println!("[Hotkey] Successfully registered: {}", normalized);
+    Ok(())
 }
 
 fn update_tray_menu(app: &tauri::AppHandle, is_recording: bool) {
@@ -422,6 +450,22 @@ fn set_recording_quality(app: tauri::AppHandle, quality: String) -> Result<(), S
     storage::set_recording_quality(&app, &quality)
 }
 
+#[tauri::command]
+fn get_recording_hotkey(app: tauri::AppHandle) -> Result<String, String> {
+    storage::get_recording_hotkey(&app)
+}
+
+#[tauri::command]
+fn set_recording_hotkey(app: tauri::AppHandle, hotkey: String) -> Result<(), String> {
+    register_hotkey(&app, &hotkey)?;
+    storage::set_recording_hotkey(&app, &hotkey)
+}
+
+#[tauri::command]
+fn set_shortcuts_disabled(state: tauri::State<'_, AppState>, disabled: bool) {
+    state.shortcuts_disabled.store(disabled, Ordering::SeqCst);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -509,30 +553,41 @@ pub fn run() {
             *state.tray_icon.lock() = Some(tray);
             *state.tray_menu.lock() = Some(menu);
 
-            // Global Shortcut: Cmd+Shift+R (or Ctrl+Shift+R)
-            #[cfg(target_os = "macos")]
-            let modifiers = Modifiers::SUPER | Modifiers::SHIFT;
-            #[cfg(not(target_os = "macos"))]
-            let modifiers = Modifiers::CONTROL | Modifiers::SHIFT;
-
-            let shortcut = Shortcut::new(Some(modifiers), Code::KeyR);
-            
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new().with_handler(move |app, key, event| {
-                    if event.state == ShortcutState::Pressed && key == &shortcut {
+                    if event.state == ShortcutState::Pressed {
                         let state = app.state::<AppState>();
-                        let is_recording = state.recording.lock().is_some();
-                        if is_recording {
-                            if let Err(e) = do_stop_recording(app, &state) {
-                                eprintln!("Failed to stop recording via shortcut: {}", e);
+                        
+                        // Check if shortcuts are globally disabled (e.g. while settings open)
+                        if state.shortcuts_disabled.load(Ordering::SeqCst) {
+                            return;
+                        }
+
+                        // Match using the string representation to be more robust across dynamic registrations
+                        let is_match = {
+                            let registered_str = state.current_shortcut_str.lock();
+                            let incoming_str = key.to_string();
+                            
+                            // Log for debugging if not match
+                            // println!("[Hotkey] Incoming: '{}', Registered: '{}'", incoming_str, *registered_str);
+                            
+                            incoming_str == *registered_str
+                        };
+
+                        if is_match {
+                            let is_recording = state.recording.lock().is_some();
+                            if is_recording {
+                                if let Err(e) = do_stop_recording(app, &state) {
+                                    eprintln!("Failed to stop recording via shortcut: {}", e);
+                                } else {
+                                    println!("Stopped recording via shortcut");
+                                }
                             } else {
-                                println!("Stopped recording via shortcut");
-                            }
-                        } else {
-                            if let Err(e) = do_start_recording(app, &state, None) {
-                                eprintln!("Failed to start recording via shortcut: {}", e);
-                            } else {
-                                println!("Started recording via shortcut");
+                                if let Err(e) = do_start_recording(app, &state, None) {
+                                    eprintln!("Failed to start recording via shortcut: {}", e);
+                                } else {
+                                    println!("Started recording via shortcut");
+                                }
                             }
                         }
                     }
@@ -540,7 +595,10 @@ pub fn run() {
                 .build(),
             )?;
             
-            app.global_shortcut().register(shortcut)?;
+            let hotkey = storage::get_recording_hotkey(app.handle())?;
+            if let Err(e) = register_hotkey(app.handle(), &hotkey) {
+                eprintln!("Failed to register initial shortcut: {}", e);
+            }
 
             Ok(())
         })
@@ -571,7 +629,10 @@ pub fn run() {
             get_preferred_mic,
             set_preferred_mic,
             get_recording_quality,
-            set_recording_quality
+            set_recording_quality,
+            get_recording_hotkey,
+            set_recording_hotkey,
+            set_shortcuts_disabled
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

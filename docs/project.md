@@ -74,7 +74,7 @@ summe uses a **Tauri** application shell:
   - post-process results into Markdown format
 - **Metadata Store**: persistent index of recordings (JSON) + settings (store plugin or JSON).
 - **UI Layer**: recording controls, status/progress, playback, preview, editing, export.
-- **OS Integrations**: tray status (timer, dynamic menu), global shortcuts, notifications, close-to-tray logic.
+- **OS Integrations**: tray status (timer, dynamic menu), global shortcuts with dynamic re-registration, notifications, close-to-tray logic.
 
 ### Data flow (record → summarize)
 
@@ -170,6 +170,7 @@ This keeps data portable and Obsidian-friendly.
 - `merge_audio_files`: Boolean toggle for creating merged MP3.
 - `preferred_mic_name`: Last used microphone name.
 - `recording_quality`: Preference for recording quality ("quality" or "size").
+- `recording_hotkey`: Custom global shortcut string (e.g., "CommandOrControl+Shift+R").
 
 ## UI (MVP screens)
 
@@ -183,6 +184,7 @@ This keeps data portable and Obsidian-friendly.
 - **Settings (Dialog)**:
   - Storage directory configuration.
   - Audio device selection and merge options.
+  - Global shortcut configuration with visual capture (`HotkeyRecorder`).
   - Gemini API key management.
 
 ## Prompt templates

@@ -24,6 +24,8 @@ import {
   summarizeRecording,
   getRecordingQuality,
   setRecordingQuality,
+  getRecordingHotkey,
+  setRecordingHotkey,
 } from "./ipc";
 
 import type { RecordingMetadata } from "./types/recording";
@@ -69,6 +71,8 @@ export default function App() {
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
   const [mergeEnabled, setMergeEnabledState] = useState<boolean>(false);
   const [recordingQuality, setRecordingQualityState] = useState<string>("quality");
+  const [hotkey, setHotkeyState] = useState<string>("");
+  const [hotkeyDraft, setHotkeyDraft] = useState<string>("");
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -106,8 +110,9 @@ export default function App() {
       getMergeAudioFiles(),
       getPreferredMic(),
       getRecordingQuality(),
+      getRecordingHotkey(),
     ])
-      .then(async ([dir, recs, devs, keyPresent, merge, prefMic, quality]) => {
+      .then(async ([dir, recs, devs, keyPresent, merge, prefMic, quality, hk]) => {
         setStorageDirState(dir);
         setStorageDirDraft(dir);
         setRecordings(recs);
@@ -115,6 +120,8 @@ export default function App() {
         setHasKey(keyPresent);
         setMergeEnabledState(merge);
         setRecordingQualityState(quality);
+        setHotkeyState(hk);
+        setHotkeyDraft(hk);
         if (prefMic) {
           setMicDevice(prefMic);
         }
@@ -197,6 +204,19 @@ export default function App() {
     } catch (e) {
       console.error(e);
       setStatus(`Error saving mic preference: ${String(e)}`);
+    }
+  }
+
+  async function onSaveHotkey() {
+    try {
+      await setRecordingHotkey(hotkeyDraft);
+      const ok = await getRecordingHotkey();
+      setHotkeyState(ok);
+      setHotkeyDraft(ok);
+      setStatus("Global shortcut updated.");
+    } catch (e) {
+      console.error(e);
+      setStatus(`Hotkey error: ${String(e)}`);
     }
   }
 
@@ -436,6 +456,11 @@ export default function App() {
 
         recordingQuality={recordingQuality}
         onChangeQuality={onChangeQuality}
+
+        hotkey={hotkey}
+        hotkeyDraft={hotkeyDraft}
+        onHotkeyDraftChange={setHotkeyDraft}
+        onSaveHotkey={onSaveHotkey}
       />
       <ConfirmDialog
         open={deleteConfirmOpen}

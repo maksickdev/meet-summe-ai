@@ -1,3 +1,11 @@
+## [2026-01-25] - Configurable Hotkeys & Visual Recorder
+### Added
+- **Visual Hotkey Recorder**: Added a specialized `HotkeyRecorder` component to the Settings dialog that allows users to set shortcuts by pressing the actual keys instead of typing text.
+- **Configurable Global Shortcut**: Users can now change the hotkey for starting and stopping recordings.
+- **Immediate Shortcut Application**: The backend now re-registers the global shortcut instantly when saved in settings, without requiring a restart.
+- **Shortcut Conflict Prevention**: Global shortcuts are automatically disabled while the recorder is listening to prevent accidental recordings when defining a new key combination.
+- **Robust Key Parsing**: Switched to using `e.code` for hotkey capture to ensure platform-agnostic mapping (e.g., `KeyR`, `Digit1`, `Space`).
+
 ## [2026-01-22] - Close to Tray
 ### Added
 - **Minimize to System Tray**: The application now minimizes to the system tray instead of closing when the window's close button is clicked.

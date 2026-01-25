@@ -32,6 +32,7 @@ struct Settings {
     merge_audio_files: Option<bool>,
     preferred_mic_name: Option<String>,
     recording_quality: Option<String>,
+    recording_hotkey: Option<String>,
 }
 
 pub fn resolve_storage_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -139,6 +140,26 @@ pub fn set_recording_quality(app: &tauri::AppHandle, quality: &str) -> Result<()
     }
     let mut settings = load_settings(app)?;
     settings.recording_quality = Some(quality.to_string());
+    save_settings(app, &settings)
+}
+
+pub fn get_recording_hotkey(app: &tauri::AppHandle) -> Result<String, String> {
+    let settings = load_settings(app)?;
+    Ok(settings.recording_hotkey.unwrap_or_else(|| {
+        #[cfg(target_os = "macos")]
+        {
+            "Command+Shift+R".to_string()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            "Ctrl+Shift+R".to_string()
+        }
+    }))
+}
+
+pub fn set_recording_hotkey(app: &tauri::AppHandle, hotkey: &str) -> Result<(), String> {
+    let mut settings = load_settings(app)?;
+    settings.recording_hotkey = Some(hotkey.to_string());
     save_settings(app, &settings)
 }
 

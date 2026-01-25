@@ -108,3 +108,15 @@ export async function getRecordingQuality(): Promise<string> {
 export async function setRecordingQuality(quality: string): Promise<void> {
   await invoke<void>("set_recording_quality", { quality });
 }
+
+export async function getRecordingHotkey(): Promise<string> {
+  return await invoke<string>("get_recording_hotkey");
+}
+
+export async function setRecordingHotkey(hotkey: string): Promise<void> {
+  await invoke<void>("set_recording_hotkey", { hotkey });
+}
+
+export async function setShortcutsDisabled(disabled: boolean): Promise<void> {
+  await invoke<void>("set_shortcuts_disabled", { disabled });
+}

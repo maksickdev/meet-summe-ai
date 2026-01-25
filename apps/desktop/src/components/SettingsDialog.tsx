@@ -5,7 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Settings, FolderOpen, Mic, Key } from "lucide-react";
+import { Settings, FolderOpen, Mic, Key, Keyboard } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -13,6 +13,7 @@ import { Select } from "./ui/select";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 import { Separator } from "./ui/separator";
+import { HotkeyRecorder } from "./HotkeyRecorder";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -21,14 +22,14 @@ interface SettingsDialogProps {
   storageDirDraft: string;
   onStorageDirDraftChange: (val: string) => void;
   onSaveStorage: () => void;
-  
+
   micDevice: string;
   devices: string[];
   onChangeMic: (val: string) => void;
-  
+
   mergeEnabled: boolean;
   onToggleMerge: (val: boolean) => void;
-  
+
   apiKey: string;
   hasKey: boolean;
   onApiKeyChange: (val: string) => void;
@@ -37,6 +38,11 @@ interface SettingsDialogProps {
 
   recordingQuality: string;
   onChangeQuality: (val: string) => void;
+
+  hotkey: string;
+  hotkeyDraft: string;
+  onHotkeyDraftChange: (val: string) => void;
+  onSaveHotkey: () => void;
 }
 
 export function SettingsDialog({
@@ -58,6 +64,10 @@ export function SettingsDialog({
   onClearApiKey,
   recordingQuality,
   onChangeQuality,
+  hotkey,
+  hotkeyDraft,
+  onHotkeyDraftChange,
+  onSaveHotkey,
 }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -120,7 +130,7 @@ export function SettingsDialog({
               />
               <Label htmlFor="merge-mode">Merge system audio & mic (Beta)</Label>
             </div>
-            
+
             <div className="space-y-3 pt-2">
               <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 Recording Quality
@@ -133,6 +143,28 @@ export function SettingsDialog({
                 <option value="size">Size Priority (16kHz, Mono, 32kbps)</option>
               </Select>
             </div>
+          </div>
+
+          <Separator />
+
+          {/* Shortcut Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              <Keyboard className="w-4 h-4" />
+              Global Shortcut
+            </div>
+            <div className="flex gap-2">
+              <HotkeyRecorder
+                value={hotkeyDraft}
+                onChange={onHotkeyDraftChange}
+                className="flex-1"
+              />
+              <Button onClick={onSaveHotkey}>Save</Button>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Current: <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">{hotkey}</code>.
+              Supports <code>CommandOrControl</code>, <code>Shift</code>, <code>Alt</code>, <code>Option</code>.
+            </p>
           </div>
 
           <Separator />
