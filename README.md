@@ -23,6 +23,15 @@ Private, cross-platform desktop app to **record system audio + microphone** and 
 - **AI**: Google Gemini API (via Rust `reqwest`)
 - **OS Integration**: Tray menu, Global shortcuts, File system access
 
+## License
+
+This project is licensed under the **Business Source License 1.1** (BSL 1.1).  
+See the [LICENSE](./LICENSE) file for the full text.
+
+- Personal, educational, research, and non-commercial use is permitted.
+- Commercial use (SaaS, hosted service, paid apps, etc.) requires a separate license — contact [your email].
+- On or after January 25, 2029 the license will automatically change to **Apache 2.0**.
+
 ## Documentation
 
 - Product requirements: `docs/prd.md`
