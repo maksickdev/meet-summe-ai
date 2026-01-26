@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import {
   clearGeminiApiKey,
   getGeminiApiKey,
-  getMergeAudioFiles,
+  getRecordingMode,
   getPreferredMic,
   getStorageDir,
   hasGeminiApiKey,
@@ -15,7 +15,7 @@ import {
   pauseRecording,
   resumeRecording,
   setGeminiApiKey,
-  setMergeAudioFiles,
+  setRecordingMode,
   setPreferredMic,
   setStorageDir,
   showInFolder,
@@ -69,7 +69,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState<string>("");
   const [templateId, setTemplateId] = useState<string>("meeting_notes");
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
-  const [mergeEnabled, setMergeEnabledState] = useState<boolean>(false);
+  const [recordingMode, setRecordingModeState] = useState<string>("merged");
   const [recordingQuality, setRecordingQualityState] = useState<string>("quality");
   const [hotkey, setHotkeyState] = useState<string>("");
   const [hotkeyDraft, setHotkeyDraft] = useState<string>("");
@@ -107,18 +107,18 @@ export default function App() {
       listRecordings(),
       listInputDevices(),
       hasGeminiApiKey(),
-      getMergeAudioFiles(),
+      getRecordingMode(),
       getPreferredMic(),
       getRecordingQuality(),
       getRecordingHotkey(),
     ])
-      .then(async ([dir, recs, devs, keyPresent, merge, prefMic, quality, hk]) => {
+      .then(async ([dir, recs, devs, keyPresent, mode, prefMic, quality, hk]) => {
         setStorageDirState(dir);
         setStorageDirDraft(dir);
         setRecordings(recs);
         setDevices(devs);
         setHasKey(keyPresent);
-        setMergeEnabledState(merge);
+        setRecordingModeState(mode);
         setRecordingQualityState(quality);
         setHotkeyState(hk);
         setHotkeyDraft(hk);
@@ -177,13 +177,13 @@ export default function App() {
 
   // --- Handlers ---
 
-  async function onToggleMerge(enabled: boolean) {
-    setMergeEnabledState(enabled);
+  async function onChangeRecordingMode(mode: string) {
+    setRecordingModeState(mode);
     try {
-      await setMergeAudioFiles(enabled);
+      await setRecordingMode(mode);
     } catch (e) {
       console.error(e);
-      setStatus(`Error saving merge setting: ${String(e)}`);
+      setStatus(`Error saving recording mode: ${String(e)}`);
     }
   }
 
@@ -445,8 +445,8 @@ export default function App() {
         devices={devices}
         onChangeMic={onChangeMic}
 
-        mergeEnabled={mergeEnabled}
-        onToggleMerge={onToggleMerge}
+        recordingMode={recordingMode}
+        onChangeRecordingMode={onChangeRecordingMode}
 
         apiKey={apiKey}
         hasKey={hasKey}

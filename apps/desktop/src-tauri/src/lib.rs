@@ -213,6 +213,42 @@ fn do_stop_recording(
         merged.channels = result.channels;
     }
 
+    // Handle recording mode: if "merged", delete extra files and keep only the merged one as the main audio.
+    let mode = storage::get_recording_mode(app).unwrap_or_else(|_| "merged".to_string());
+    if mode == "merged" {
+        let old_mic_path = storage::abs_path(app, &meta.audio.relative_path)?;
+        let system_path = meta.system_audio.as_ref().and_then(|s| storage::abs_path(app, &s.relative_path).ok());
+        let merged_path = meta.merged_audio.as_ref().and_then(|s| storage::abs_path(app, &s.relative_path).ok());
+
+        // New relative path for merged mode
+        let new_rel_path = meta.audio.relative_path.replace("mic.mp3", "recording.mp3");
+        let new_abs_path = storage::abs_path(app, &new_rel_path)?;
+
+        if let Some(m_path) = merged_path {
+            if m_path.exists() {
+                // Rename merged to recording.mp3
+                let _ = std::fs::rename(&m_path, &new_abs_path);
+            }
+        }
+
+        // Delete original mic file
+        if old_mic_path.exists() {
+            let _ = std::fs::remove_file(&old_mic_path);
+        }
+
+        // Delete system file if it exists
+        if let Some(s_path) = system_path {
+            if s_path.exists() {
+                let _ = std::fs::remove_file(s_path);
+            }
+        }
+
+        // Update metadata to reflect that only one file remains and its name is recording.mp3
+        meta.audio.relative_path = new_rel_path;
+        meta.system_audio = None;
+        meta.merged_audio = None;
+    }
+
     storage::save_recording_metadata(app, &meta)?;
     
     // Update state and UI
@@ -421,13 +457,13 @@ fn save_recording_note(
 }
 
 #[tauri::command]
-fn get_merge_audio_files(app: tauri::AppHandle) -> Result<bool, String> {
-    storage::get_merge_audio_files(&app)
+fn get_recording_mode(app: tauri::AppHandle) -> Result<String, String> {
+    storage::get_recording_mode(&app)
 }
 
 #[tauri::command]
-fn set_merge_audio_files(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
-    storage::set_merge_audio_files(&app, enabled)
+fn set_recording_mode(app: tauri::AppHandle, mode: String) -> Result<(), String> {
+    storage::set_recording_mode(&app, mode)
 }
 
 #[tauri::command]
@@ -624,8 +660,8 @@ pub fn run() {
             stop_recording,
             read_recording_note,
             save_recording_note,
-            get_merge_audio_files,
-            set_merge_audio_files,
+            get_recording_mode,
+            set_recording_mode,
             get_preferred_mic,
             set_preferred_mic,
             get_recording_quality,

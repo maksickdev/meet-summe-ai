@@ -1,3 +1,18 @@
+## [2026-01-26] - Unified Recording Modes & Cleanup
+### Added
+- **Recording Modes**: Replaced the "Merge (Beta)" toggle with a high-level `Recording Mode` setting:
+  - **Merged (single file)**: Produces one high-quality MP3 (`recording.mp3`) containing both microphone and system audio. Original tracks are deleted automatically after recording stops to save space.
+  - **Separated (three files)**: Keeps all tracks (`mic.mp3`, `system.mp3`, and `merged.mp3`) for professional editing or audit needs.
+- **UI Scaling**: In `Merged` mode, the audio player now stretches to the full width of the window and is clearly labeled as **RECORDING**.
+
+### Changed
+- **Automatic Post-processing**: The backend now handles the renaming of the mixed track to `recording.mp3` and handles cleanup of temporary raw files in merged mode.
+- **Settings UI**: Replaced the previous binary toggle with a `Select` component for Recording Mode, improved terminology.
+
+### Fixed
+- **Rust Backend Cleanup**: Fixed multiple build warnings related to unused imports (`Code`, `Modifiers`), unused variables (`mode`), and dead code (`WavStereoWriter`).
+- **Build Stabilization**: Successfully validated the production build pipeline via `npm run tauri build`.
+
 ## [2026-01-25] - Configurable Hotkeys & Visual Recorder
 ### Added
 - **Visual Hotkey Recorder**: Added a specialized `HotkeyRecorder` component to the Settings dialog that allows users to set shortcuts by pressing the actual keys instead of typing text.

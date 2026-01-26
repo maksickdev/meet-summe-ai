@@ -85,12 +85,12 @@ export async function showInFolder(path: string): Promise<void> {
   await invoke<void>("show_in_folder", { path });
 }
 
-export async function getMergeAudioFiles(): Promise<boolean> {
-  return await invoke<boolean>("get_merge_audio_files");
+export async function getRecordingMode(): Promise<string> {
+  return await invoke<string>("get_recording_mode");
 }
 
-export async function setMergeAudioFiles(enabled: boolean): Promise<void> {
-  await invoke<void>("set_merge_audio_files", { enabled });
+export async function setRecordingMode(mode: string): Promise<void> {
+  await invoke<void>("set_recording_mode", { mode });
 }
 
 export async function getPreferredMic(): Promise<string | null> {

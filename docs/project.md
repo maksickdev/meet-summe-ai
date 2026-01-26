@@ -67,7 +67,7 @@ summe uses a **Tauri** application shell:
 
 ### High-level components
 
-- **Recording Engine (Rust)**: captures system output + microphone, mixes or stores separate streams, writes audio to disk.
+- **Recording Engine (Rust)**: captures system output + microphone, performs real-time mixing (AEC + AGC), and handles post-recording cleanup/renaming based on the selected mode.
 - **Processing Pipeline**:
   - optional: audio normalization/splitting
   - upload audio or transcript to Gemini
@@ -167,7 +167,7 @@ This keeps data portable and Obsidian-friendly.
 
 - `storage_dir`: Custom path for recordings.
 - `gemini_api_key`: API key for summarization.
-- `merge_audio_files`: Boolean toggle for creating merged MP3.
+- `recording_mode`: Choice between "merged" (single output file) and "separated" (raw tracks + merged).
 - `preferred_mic_name`: Last used microphone name.
 - `recording_quality`: Preference for recording quality ("quality" or "size").
 - `recording_hotkey`: Custom global shortcut string (e.g., "CommandOrControl+Shift+R").
@@ -178,7 +178,7 @@ This keeps data portable and Obsidian-friendly.
   - **Sidebar (Left)**: Scrollable list of recordings with metadata (date, duration). Supports right-click context menu for Rename/Delete.
   - **Header (Top)**: Global recording controls (Start/Stop/Pause), real-time recording timer (`HH:MM:SS`), status indicator (pulsing red/solid amber), and Settings trigger.
   - **Main Content (Right)**:
-    - **Audio Player**: Multi-track playback (Mic, System, Merged).
+    - **Audio Player**: Multi-track playback (Mic, System, Merged). In "Merged" mode, a single player stretches to full width.
     - **Summarization**: Controls to generate AI summaries.
     - **Editor**: Markdown editor for transcript/notes.
 - **Settings (Dialog)**:

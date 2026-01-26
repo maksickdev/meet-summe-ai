@@ -10,8 +10,6 @@ import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Select } from "./ui/select";
-import { Switch } from "./ui/switch";
-import { Label } from "./ui/label";
 import { Separator } from "./ui/separator";
 import { HotkeyRecorder } from "./HotkeyRecorder";
 
@@ -27,8 +25,8 @@ interface SettingsDialogProps {
   devices: string[];
   onChangeMic: (val: string) => void;
 
-  mergeEnabled: boolean;
-  onToggleMerge: (val: boolean) => void;
+  recordingMode: string;
+  onChangeRecordingMode: (val: string) => void;
 
   apiKey: string;
   hasKey: boolean;
@@ -55,8 +53,8 @@ export function SettingsDialog({
   micDevice,
   devices,
   onChangeMic,
-  mergeEnabled,
-  onToggleMerge,
+  recordingMode,
+  onChangeRecordingMode,
   apiKey,
   hasKey,
   onApiKeyChange,
@@ -122,13 +120,17 @@ export function SettingsDialog({
                 </option>
               ))}
             </Select>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="merge-mode"
-                checked={mergeEnabled}
-                onCheckedChange={onToggleMerge}
-              />
-              <Label htmlFor="merge-mode">Merge system audio & mic (Beta)</Label>
+            <div className="space-y-3 pt-1">
+              <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                Recording Mode
+              </div>
+              <Select
+                value={recordingMode}
+                onChange={(e) => onChangeRecordingMode(e.target.value)}
+              >
+                <option value="merged">Merged (single file)</option>
+                <option value="separated">Separated (three files: mic, system, merged)</option>
+              </Select>
             </div>
 
             <div className="space-y-3 pt-2">

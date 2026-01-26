@@ -29,7 +29,7 @@ pub struct RecordingMetadata {
 struct Settings {
     storage_dir: Option<String>,
     gemini_api_key: Option<String>,
-    merge_audio_files: Option<bool>,
+    recording_mode: Option<String>, // "merged" | "separated"
     preferred_mic_name: Option<String>,
     recording_quality: Option<String>,
     recording_hotkey: Option<String>,
@@ -67,20 +67,12 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
     let markdown_relative_path = Some(format!("recordings/{id}/notes.md"));
 
     let settings = load_settings(app)?;
-    let merge_enabled = settings.merge_audio_files.unwrap_or(false);
+    let mode = settings.recording_mode.as_deref().unwrap_or("merged");
 
-    let merged_audio = if merge_enabled {
-        Some(RecordingAudioInfo {
-            relative_path: merged_audio_relative_path,
-            duration_ms: None,
-            format: "mp3".to_string(),
-            sample_rate: 48_000,
-            channels: 2,
-        })
-    } else {
-        None
-    };
-
+    // We always create paths for system and merged tracks during recording 
+    // to allow backend to perform AEC and merging. 
+    // We will clean up files in do_stop_recording if mode is "merged".
+    
     let meta = RecordingMetadata {
         id,
         created_at,
@@ -99,7 +91,13 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
             sample_rate: 48_000,
             channels: 2,
         }),
-        merged_audio,
+        merged_audio: Some(RecordingAudioInfo {
+            relative_path: merged_audio_relative_path,
+            duration_ms: None,
+            format: "mp3".to_string(),
+            sample_rate: 48_000,
+            channels: 2,
+        }),
         markdown_relative_path,
     };
 
@@ -107,14 +105,17 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
     Ok(meta)
 }
 
-pub fn get_merge_audio_files(app: &tauri::AppHandle) -> Result<bool, String> {
+pub fn get_recording_mode(app: &tauri::AppHandle) -> Result<String, String> {
     let settings = load_settings(app)?;
-    Ok(settings.merge_audio_files.unwrap_or(false))
+    Ok(settings.recording_mode.unwrap_or_else(|| "merged".to_string()))
 }
 
-pub fn set_merge_audio_files(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
+pub fn set_recording_mode(app: &tauri::AppHandle, mode: String) -> Result<(), String> {
+    if mode != "merged" && mode != "separated" {
+        return Err("Invalid recording mode".to_string());
+    }
     let mut settings = load_settings(app)?;
-    settings.merge_audio_files = Some(enabled);
+    settings.recording_mode = Some(mode);
     save_settings(app, &settings)
 }
 
