@@ -2,14 +2,18 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import { RotateCcw } from "lucide-react";
 import { readRecordingNote, saveRecordingNote } from "../ipc";
 
 export type MarkdownEditorProps = {
   recordingId: string;
-  initialPath: string; // just to trigger reload if changed
+  noteId?: string; // If provided, load this specific note
+  initialPath?: string; // used for backward compatibility or to trigger reload
+  onRegenerate?: () => void;
+  isRegenerating?: boolean;
 };
 
-export function MarkdownEditor({ recordingId }: MarkdownEditorProps) {
+export function MarkdownEditor({ recordingId, noteId, onRegenerate, isRegenerating }: MarkdownEditorProps) {
   const [content, setContent] = useState<string>("");
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [draft, setDraft] = useState<string>("");
@@ -17,12 +21,12 @@ export function MarkdownEditor({ recordingId }: MarkdownEditorProps) {
 
   useEffect(() => {
     loadNote();
-  }, [recordingId]);
+  }, [recordingId, noteId]);
 
   async function loadNote() {
     setStatus("Loading...");
     try {
-      const text = await readRecordingNote(recordingId);
+      const text = await readRecordingNote(recordingId, noteId);
       setContent(text);
       setDraft(text);
       setStatus("");
@@ -34,7 +38,7 @@ export function MarkdownEditor({ recordingId }: MarkdownEditorProps) {
   async function onSave() {
     setStatus("Saving...");
     try {
-      await saveRecordingNote(recordingId, draft);
+      await saveRecordingNote(recordingId, draft, noteId);
       setContent(draft);
       setIsEditing(false);
       setStatus("Saved.");
@@ -50,6 +54,16 @@ export function MarkdownEditor({ recordingId }: MarkdownEditorProps) {
           Notes {status && <span className="font-normal text-zinc-400">({status})</span>}
         </div>
         <div className="flex gap-2">
+          {onRegenerate && !isEditing && (
+            <button
+              onClick={onRegenerate}
+              disabled={isRegenerating}
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 disabled:opacity-50 p-2"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              {isRegenerating ? "Processing..." : "Regenerate"}
+            </button>
+          )}
           {isEditing ? (
             <>
               <button
@@ -60,7 +74,7 @@ export function MarkdownEditor({ recordingId }: MarkdownEditorProps) {
               </button>
               <button
                 onClick={() => {
-                  onSave().catch(() => {});
+                  onSave().catch(() => { });
                 }}
                 className="rounded bg-zinc-900 px-2 py-1 text-xs text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
               >
@@ -81,12 +95,12 @@ export function MarkdownEditor({ recordingId }: MarkdownEditorProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex flex-1 flex-col min-h-0 p-4">
         {isEditing ? (
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="h-full w-full resize-none bg-transparent font-mono text-sm outline-none dark:text-zinc-50"
+            className="w-full flex-1 resize-none bg-transparent font-mono text-sm outline-none dark:text-zinc-50"
           />
         ) : content ? (
           <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -96,7 +110,7 @@ export function MarkdownEditor({ recordingId }: MarkdownEditorProps) {
           </div>
         ) : (
           <div className="flex h-full items-center justify-center rounded-md border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
-            No notes yet. Click "Summarize" to generate one.
+            No notes yet. Click "Generate" to create one.
           </div>
         )}
       </div>

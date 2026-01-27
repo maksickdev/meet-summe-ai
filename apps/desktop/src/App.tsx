@@ -26,9 +26,13 @@ import {
   setRecordingQuality,
   getRecordingHotkey,
   setRecordingHotkey,
+  listCustomPrompts,
+  createCustomPrompt,
+  updateCustomPrompt,
+  deleteCustomPrompt,
 } from "./ipc";
 
-import type { RecordingMetadata } from "./types/recording";
+import type { RecordingMetadata, CustomPrompt } from "./types/recording";
 
 import { AppLayout } from "./components/AppLayout";
 import { Sidebar } from "./components/Sidebar";
@@ -67,12 +71,12 @@ export default function App() {
 
   const [hasKey, setHasKey] = useState<boolean>(false);
   const [apiKey, setApiKey] = useState<string>("");
-  const [templateId, setTemplateId] = useState<string>("meeting_notes");
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
   const [recordingMode, setRecordingModeState] = useState<string>("merged");
   const [recordingQuality, setRecordingQualityState] = useState<string>("quality");
   const [hotkey, setHotkeyState] = useState<string>("");
   const [hotkeyDraft, setHotkeyDraft] = useState<string>("");
+  const [customPrompts, setCustomPrompts] = useState<CustomPrompt[]>([]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -111,8 +115,9 @@ export default function App() {
       getPreferredMic(),
       getRecordingQuality(),
       getRecordingHotkey(),
+      listCustomPrompts(),
     ])
-      .then(async ([dir, recs, devs, keyPresent, mode, prefMic, quality, hk]) => {
+      .then(async ([dir, recs, devs, keyPresent, mode, prefMic, quality, hk, prompts]) => {
         setStorageDirState(dir);
         setStorageDirDraft(dir);
         setRecordings(recs);
@@ -122,6 +127,7 @@ export default function App() {
         setRecordingQualityState(quality);
         setHotkeyState(hk);
         setHotkeyDraft(hk);
+        setCustomPrompts(prompts);
         if (prefMic) {
           setMicDevice(prefMic);
         }
@@ -368,7 +374,7 @@ export default function App() {
     }
   }
 
-  async function onSummarize() {
+  async function onSummarize(promptId: string, noteId?: string) {
     if (!selected) return;
     if (!hasKey) {
       setIsSettingsOpen(true);
@@ -379,7 +385,7 @@ export default function App() {
     setIsSummarizing(true);
     try {
       setStatus("Summarizing with Gemini...");
-      const updated = await summarizeRecording(selected.id, templateId);
+      const updated = await summarizeRecording(selected.id, promptId, noteId);
       await refreshRecordings();
       setSelectedId(updated.id);
       setStatus("Summarization complete! Markdown saved.");
@@ -388,6 +394,45 @@ export default function App() {
       setStatus(`Summarize error: ${String(e)}`);
     } finally {
       setIsSummarizing(false);
+    }
+  }
+
+  async function onRefreshPrompts() {
+    try {
+      const list = await listCustomPrompts();
+      setCustomPrompts(list);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function onCreatePrompt(name: string, content: string) {
+    try {
+      await createCustomPrompt(name, content);
+      await onRefreshPrompts();
+    } catch (e) {
+      console.error(e);
+      setStatus(`Error creating prompt: ${String(e)}`);
+    }
+  }
+
+  async function onUpdatePrompt(id: string, name: string, content: string) {
+    try {
+      await updateCustomPrompt(id, name, content);
+      await onRefreshPrompts();
+    } catch (e) {
+      console.error(e);
+      setStatus(`Error updating prompt: ${String(e)}`);
+    }
+  }
+
+  async function onDeletePrompt(id: string) {
+    try {
+      await deleteCustomPrompt(id);
+      await onRefreshPrompts();
+    } catch (e) {
+      console.error(e);
+      setStatus(`Error deleting prompt: ${String(e)}`);
     }
   }
 
@@ -421,8 +466,7 @@ export default function App() {
           storageDir={storageDir}
           hasKey={hasKey}
           isSummarizing={isSummarizing}
-          templateId={templateId}
-          onTemplateChange={setTemplateId}
+          customPrompts={customPrompts}
           onSummarize={onSummarize}
           onShowInFolder={onShowInFolder}
         />
@@ -461,6 +505,11 @@ export default function App() {
         hotkeyDraft={hotkeyDraft}
         onHotkeyDraftChange={setHotkeyDraft}
         onSaveHotkey={onSaveHotkey}
+
+        customPrompts={customPrompts}
+        onCreatePrompt={onCreatePrompt}
+        onUpdatePrompt={onUpdatePrompt}
+        onDeletePrompt={onDeletePrompt}
       />
       <ConfirmDialog
         open={deleteConfirmOpen}

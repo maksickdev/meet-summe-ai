@@ -6,6 +6,13 @@ export type RecordingAudioInfo = {
   channels: number;
 };
 
+export type RecordingNote = {
+  id: string;
+  prompt_id: string;
+  relative_path: string;
+  created_at: string;
+};
+
 export type RecordingMetadata = {
   id: string;
   created_at: string;
@@ -13,5 +20,12 @@ export type RecordingMetadata = {
   audio: RecordingAudioInfo;
   system_audio?: RecordingAudioInfo | null;
   merged_audio?: RecordingAudioInfo | null;
-  markdown_relative_path: string | null;
+  markdown_relative_path: string | null; // Deprecated
+  notes?: RecordingNote[] | null;
+};
+
+export type CustomPrompt = {
+  id: string;
+  name: string;
+  content: string;
 };

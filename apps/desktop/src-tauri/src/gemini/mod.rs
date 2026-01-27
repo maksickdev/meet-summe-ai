@@ -41,11 +41,10 @@ pub async fn summarize_audio_to_markdown(
     api_key: &str,
     audio_bytes: Vec<u8>,
     audio_mime: &str,
-    template_id: &str,
+    prompt_text: &str,
 ) -> Result<String, String> {
     // Gemini Generative Language API: send audio as inlineData.
     // We intentionally keep the response as plain text Markdown.
-    let template = template_text(template_id)?;
     let audio_b64 = STANDARD.encode(audio_bytes);
 
     let body = json!({
@@ -53,7 +52,7 @@ pub async fn summarize_audio_to_markdown(
         {
           "role": "user",
           "parts": [
-            {"text": template},
+            {"text": prompt_text},
             {"text": "\n\nNow process the provided audio and return ONLY the Markdown note."},
             {"inlineData": {"mimeType": audio_mime, "data": audio_b64}}
           ]

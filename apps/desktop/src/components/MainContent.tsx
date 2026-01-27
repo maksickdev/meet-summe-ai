@@ -1,7 +1,8 @@
-import type { RecordingMetadata } from "../types/recording";
+import { useState, useEffect } from "react";
+import type { RecordingMetadata, CustomPrompt } from "../types/recording";
 import { AudioPlayer } from "./AudioPlayer";
 import { MarkdownEditor } from "./MarkdownEditor";
-import { Bot, FileText, Folder, Sparkles, Mic } from "lucide-react";
+import { Bot, FileText, Folder, Sparkles, Mic, Plus } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import { Button } from "./ui/button";
 import { Select } from "./ui/select";
@@ -12,9 +13,8 @@ interface MainContentProps {
   storageDir: string;
   hasKey: boolean;
   isSummarizing: boolean;
-  templateId: string;
-  onTemplateChange: (id: string) => void;
-  onSummarize: () => void;
+  customPrompts: CustomPrompt[];
+  onSummarize: (promptId: string, noteId?: string) => void;
   onShowInFolder: () => void;
 }
 
@@ -25,16 +25,38 @@ function joinPaths(base: string, relative: string): string {
   return `${b}/${r}`;
 }
 
+const DEFAULT_PROMPTS = [
+  { id: "meeting_notes", name: "Meeting Notes" },
+  { id: "lecture_notes", name: "Lecture Notes" },
+  { id: "brainstorming", name: "Brainstorming" },
+  { id: "interview", name: "Interview" },
+];
+
 export function MainContent({
   selected,
   storageDir,
   hasKey,
   isSummarizing,
-  templateId,
-  onTemplateChange,
+  customPrompts,
   onSummarize,
   onShowInFolder,
 }: MainContentProps) {
+  const [activeNoteId, setActiveNoteId] = useState<string | undefined>();
+  const [selectedPromptId, setSelectedPromptId] = useState<string>("meeting_notes");
+
+  // Keep track of notes count to auto-select new notes
+  const notesCount = selected?.notes?.length ?? 0;
+
+  useEffect(() => {
+    if (selected?.notes && selected.notes.length > 0) {
+      if (!activeNoteId || !selected.notes.find(n => n.id === activeNoteId)) {
+        setActiveNoteId(selected.notes[0].id);
+      }
+    } else {
+      setActiveNoteId(undefined);
+    }
+  }, [selected?.id, notesCount]);
+
   if (!selected) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-zinc-50/50 text-center text-zinc-500 dark:bg-[#101013] dark:text-zinc-400">
@@ -54,6 +76,8 @@ export function MainContent({
   const selectedAbsMergedAudioPath = selected.merged_audio
     ? joinPaths(storageDir, selected.merged_audio.relative_path)
     : null;
+
+  const currentNote = selected.notes?.find(n => n.id === activeNoteId);
 
   return (
     <ScrollArea className="h-full w-full bg-white dark:bg-[#101013]">
@@ -115,41 +139,72 @@ export function MainContent({
 
         <Separator />
 
-        {/* Transcript / Notes Section */}
+        {/* AI Notes Section */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-              <Sparkles className="w-5 h-5 text-white-800" />
-              <span>AI Summary</span>
+              <Sparkles className="w-5 h-5 text-purple-500" />
+              <span>AI Notes</span>
             </div>
 
             <div className="flex items-center gap-2">
               <Select
-                value={templateId}
-                onChange={(e) => onTemplateChange(e.target.value)}
-                className="w-[150px]"
+                value={selectedPromptId}
+                onChange={(e) => setSelectedPromptId(e.target.value)}
+                className="w-[180px]"
               >
-                <option value="meeting_notes">Meeting Notes</option>
-                <option value="lecture_notes">Lecture Notes</option>
-                <option value="brainstorming">Brainstorming</option>
-                <option value="interview">Interview</option>
+                <optgroup label="Default">
+                  {DEFAULT_PROMPTS.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </optgroup>
+                {customPrompts.length > 0 && (
+                  <optgroup label="Custom">
+                    {customPrompts.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </optgroup>
+                )}
               </Select>
 
               <Button
-                onClick={onSummarize}
+                onClick={() => onSummarize(selectedPromptId)}
                 disabled={isSummarizing || !hasKey}
-                className="bg-purple-600 text-white hover:bg-purple-700"
+                className="bg-purple-600 text-white hover:bg-purple-700 gap-2"
               >
-                {isSummarizing ? "Processing..." : "Generate"}
-                {!hasKey && <span className="sr-only">(Key missing)</span>}
+                {isSummarizing ? "Processing..." : <><Plus className="w-4 h-4" /> Generate New</>}
               </Button>
             </div>
           </div>
 
-          <div className="min-h-[400px] rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          {/* Tabs for notes */}
+          {selected.notes && selected.notes.length > 0 && (
+            <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto pb-px">
+              {selected.notes.map((note) => {
+                const prompt = [...DEFAULT_PROMPTS, ...customPrompts].find(p => p.id === note.prompt_id);
+                const isActive = note.id === activeNoteId;
+                return (
+                  <button
+                    key={note.id}
+                    onClick={() => setActiveNoteId(note.id)}
+                    className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${isActive
+                      ? "border-purple-500 text-purple-600 dark:text-purple-400"
+                      : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                      }`}
+                  >
+                    {prompt?.name || "Note"}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex h-[500px] flex-col rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
             <MarkdownEditor
               recordingId={selected.id}
-              initialPath={selected.markdown_relative_path || ""}
+              noteId={activeNoteId}
+              onRegenerate={currentNote ? () => onSummarize(currentNote.prompt_id, currentNote.id) : undefined}
+              isRegenerating={isSummarizing}
             />
           </div>
         </section>

@@ -15,6 +15,14 @@ pub struct RecordingAudioInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingNote {
+    pub id: String,
+    pub prompt_id: String,
+    pub relative_path: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingMetadata {
     pub id: String,
     pub created_at: DateTime<Utc>,
@@ -22,21 +30,30 @@ pub struct RecordingMetadata {
     pub audio: RecordingAudioInfo,               // Microphone audio (primary)
     pub system_audio: Option<RecordingAudioInfo>, // System audio (optional)
     pub merged_audio: Option<RecordingAudioInfo>, // Merged audio (optional)
-    pub markdown_relative_path: Option<String>,
+    pub markdown_relative_path: Option<String>,   // Deprecated: used for single note mode
+    pub notes: Option<Vec<RecordingNote>>,       // Multiple notes
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomPrompt {
+    pub id: String,
+    pub name: String,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct Settings {
-    storage_dir: Option<String>,
-    gemini_api_key: Option<String>,
-    recording_mode: Option<String>, // "merged" | "separated"
-    preferred_mic_name: Option<String>,
-    recording_quality: Option<String>,
-    recording_hotkey: Option<String>,
+pub struct Settings {
+    pub storage_dir: Option<String>,
+    pub gemini_api_key: Option<String>,
+    pub recording_mode: Option<String>, // "merged" | "separated"
+    pub preferred_mic_name: Option<String>,
+    pub recording_quality: Option<String>,
+    pub recording_hotkey: Option<String>,
+    pub custom_prompts: Option<Vec<CustomPrompt>>,
 }
 
 pub fn resolve_storage_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let settings = load_settings(app)?;
+    let settings = get_settings(app)?;
     if let Some(p) = settings.storage_dir {
         return Ok(PathBuf::from(p));
     }
@@ -51,9 +68,9 @@ pub fn set_storage_dir(app: &tauri::AppHandle, path: &str) -> Result<(), String>
         return Err("Storage directory must be an absolute path.".to_string());
     }
 
-    let mut settings = load_settings(app)?;
+    let mut settings = get_settings(app)?;
     settings.storage_dir = Some(path.to_string_lossy().to_string());
-    save_settings(app, &settings)
+    set_settings(app, settings)
 }
 
 pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata, String> {
@@ -66,7 +83,7 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
     let merged_audio_relative_path = format!("recordings/{id}/merged.mp3");
     let markdown_relative_path = Some(format!("recordings/{id}/notes.md"));
 
-    let settings = load_settings(app)?;
+    let settings = get_settings(app)?;
     let mode = settings.recording_mode.as_deref().unwrap_or("merged");
 
     // We always create paths for system and merged tracks during recording 
@@ -99,6 +116,7 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
             channels: 2,
         }),
         markdown_relative_path,
+        notes: Some(Vec::new()),
     };
 
     save_recording_metadata(app, &meta)?;
@@ -106,7 +124,7 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
 }
 
 pub fn get_recording_mode(app: &tauri::AppHandle) -> Result<String, String> {
-    let settings = load_settings(app)?;
+    let settings = get_settings(app)?;
     Ok(settings.recording_mode.unwrap_or_else(|| "merged".to_string()))
 }
 
@@ -114,24 +132,24 @@ pub fn set_recording_mode(app: &tauri::AppHandle, mode: String) -> Result<(), St
     if mode != "merged" && mode != "separated" {
         return Err("Invalid recording mode".to_string());
     }
-    let mut settings = load_settings(app)?;
+    let mut settings = get_settings(app)?;
     settings.recording_mode = Some(mode);
-    save_settings(app, &settings)
+    set_settings(app, settings)
 }
 
 pub fn get_preferred_mic(app: &tauri::AppHandle) -> Result<Option<String>, String> {
-    let settings = load_settings(app)?;
+    let settings = get_settings(app)?;
     Ok(settings.preferred_mic_name)
 }
 
 pub fn set_preferred_mic(app: &tauri::AppHandle, name: Option<String>) -> Result<(), String> {
-    let mut settings = load_settings(app)?;
+    let mut settings = get_settings(app)?;
     settings.preferred_mic_name = name;
-    save_settings(app, &settings)
+    set_settings(app, settings)
 }
 
 pub fn get_recording_quality(app: &tauri::AppHandle) -> Result<String, String> {
-    let settings = load_settings(app)?;
+    let settings = get_settings(app)?;
     Ok(settings.recording_quality.unwrap_or_else(|| "quality".to_string()))
 }
 
@@ -139,13 +157,13 @@ pub fn set_recording_quality(app: &tauri::AppHandle, quality: &str) -> Result<()
     if quality != "quality" && quality != "size" {
         return Err("Invalid quality setting".to_string());
     }
-    let mut settings = load_settings(app)?;
+    let mut settings = get_settings(app)?;
     settings.recording_quality = Some(quality.to_string());
-    save_settings(app, &settings)
+    set_settings(app, settings)
 }
 
 pub fn get_recording_hotkey(app: &tauri::AppHandle) -> Result<String, String> {
-    let settings = load_settings(app)?;
+    let settings = get_settings(app)?;
     Ok(settings.recording_hotkey.unwrap_or_else(|| {
         #[cfg(target_os = "macos")]
         {
@@ -159,9 +177,9 @@ pub fn get_recording_hotkey(app: &tauri::AppHandle) -> Result<String, String> {
 }
 
 pub fn set_recording_hotkey(app: &tauri::AppHandle, hotkey: &str) -> Result<(), String> {
-    let mut settings = load_settings(app)?;
+    let mut settings = get_settings(app)?;
     settings.recording_hotkey = Some(hotkey.to_string());
-    save_settings(app, &settings)
+    set_settings(app, settings)
 }
 
 pub fn list_recordings(app: &tauri::AppHandle) -> Result<Vec<RecordingMetadata>, String> {
@@ -183,15 +201,13 @@ pub fn list_recordings(app: &tauri::AppHandle) -> Result<Vec<RecordingMetadata>,
         {
             continue;
         }
-        let meta_path = entry.path().join("metadata.json");
-        if !meta_path.exists() {
-            continue;
+
+        let name = entry.file_name();
+        let id = name.to_string_lossy();
+        
+        if let Ok(meta) = load_recording_metadata(app, &id) {
+            out.push(meta);
         }
-        let bytes =
-            std::fs::read(&meta_path).map_err(|e| format!("Failed to read metadata: {e}"))?;
-        let meta: RecordingMetadata =
-            serde_json::from_slice(&bytes).map_err(|e| format!("Invalid metadata.json: {e}"))?;
-        out.push(meta);
     }
 
     out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -204,7 +220,23 @@ pub fn load_recording_metadata(
 ) -> Result<RecordingMetadata, String> {
     let path = recording_dir(app, id)?.join("metadata.json");
     let bytes = std::fs::read(&path).map_err(|e| format!("Failed to read metadata: {e}"))?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("Invalid metadata.json: {e}"))
+    let mut meta: RecordingMetadata = serde_json::from_slice(&bytes).map_err(|e| format!("Invalid metadata.json: {e}"))?;
+
+    // Migration: if notes is None but we have a deprecated markdown path, move it to notes
+    if meta.notes.is_none() {
+        if let Some(rel) = meta.markdown_relative_path.clone() {
+            meta.notes = Some(vec![RecordingNote {
+                id: "default".to_string(),
+                prompt_id: "meeting_notes".to_string(), // Assume default
+                relative_path: rel,
+                created_at: meta.created_at,
+            }]);
+        } else {
+            meta.notes = Some(Vec::new());
+        }
+    }
+    
+    Ok(meta)
 }
 
 pub fn save_recording_metadata(
@@ -235,11 +267,20 @@ pub fn rename_recording(app: &tauri::AppHandle, id: &str, new_title: &str) -> Re
     save_recording_metadata(app, &meta)
 }
 
-pub fn read_recording_note(app: &tauri::AppHandle, id: &str) -> Result<String, String> {
+pub fn read_recording_note(app: &tauri::AppHandle, id: &str, note_id: Option<&str>) -> Result<String, String> {
     let meta = load_recording_metadata(app, id)?;
-    let rel_path = meta
-        .markdown_relative_path
-        .ok_or("No markdown note for this recording")?;
+    
+    let rel_path = if let Some(nid) = note_id {
+        meta.notes.as_ref()
+            .and_then(|notes| notes.iter().find(|n| n.id == nid))
+            .map(|n| n.relative_path.clone())
+            .ok_or_else(|| format!("Note with id {} not found", nid))?
+    } else {
+        meta.markdown_relative_path
+            .clone()
+            .ok_or("No default markdown note for this recording")?
+    };
+
     let path = abs_path(app, &rel_path)?;
     if !path.exists() {
         return Ok(String::new());
@@ -247,11 +288,25 @@ pub fn read_recording_note(app: &tauri::AppHandle, id: &str) -> Result<String, S
     std::fs::read_to_string(path).map_err(|e| format!("Failed to read note: {e}"))
 }
 
-pub fn save_recording_note(app: &tauri::AppHandle, id: &str, content: &str) -> Result<(), String> {
+pub fn save_recording_note(
+    app: &tauri::AppHandle,
+    id: &str,
+    note_id: Option<&str>,
+    content: &str,
+) -> Result<(), String> {
     let meta = load_recording_metadata(app, id)?;
-    let rel_path = meta
-        .markdown_relative_path
-        .ok_or("No markdown note for this recording")?;
+    
+    let rel_path = if let Some(nid) = note_id {
+        meta.notes.as_ref()
+            .and_then(|notes| notes.iter().find(|n| n.id == nid))
+            .map(|n| n.relative_path.clone())
+            .ok_or_else(|| format!("Note with id {} not found", nid))?
+    } else {
+        meta.markdown_relative_path
+            .clone()
+            .ok_or("No default markdown note for this recording")?
+    };
+
     let path = abs_path(app, &rel_path)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create note dir: {e}"))?;
@@ -275,7 +330,7 @@ fn settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(base.join("settings.json"))
 }
 
-fn load_settings(app: &tauri::AppHandle) -> Result<Settings, String> {
+pub fn get_settings(app: &tauri::AppHandle) -> Result<Settings, String> {
     let path = settings_path(app)?;
     if !path.exists() {
         return Ok(Settings::default());
@@ -284,20 +339,20 @@ fn load_settings(app: &tauri::AppHandle) -> Result<Settings, String> {
     serde_json::from_slice(&bytes).map_err(|e| format!("Invalid settings.json: {e}"))
 }
 
-fn save_settings(app: &tauri::AppHandle, settings: &Settings) -> Result<(), String> {
+pub fn set_settings(app: &tauri::AppHandle, settings: Settings) -> Result<(), String> {
     let path = settings_path(app)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create settings dir: {e}"))?;
     }
-    let bytes = serde_json::to_vec_pretty(settings)
+    let bytes = serde_json::to_vec_pretty(&settings)
         .map_err(|e| format!("Failed to serialize settings: {e}"))?;
     std::fs::write(&path, bytes).map_err(|e| format!("Failed to write settings: {e}"))
 }
 
 // Gemini API key management
 pub fn has_gemini_api_key(app: &tauri::AppHandle) -> Result<bool, String> {
-    let settings = load_settings(app)?;
+    let settings = get_settings(app)?;
     Ok(settings
         .gemini_api_key
         .as_ref()
@@ -306,7 +361,7 @@ pub fn has_gemini_api_key(app: &tauri::AppHandle) -> Result<bool, String> {
 }
 
 pub fn get_gemini_api_key(app: &tauri::AppHandle) -> Result<String, String> {
-    let settings = load_settings(app)?;
+    let settings = get_settings(app)?;
     settings
         .gemini_api_key
         .filter(|k| !k.trim().is_empty())
@@ -317,13 +372,13 @@ pub fn set_gemini_api_key(app: &tauri::AppHandle, api_key: &str) -> Result<(), S
     if api_key.trim().is_empty() {
         return Err("Gemini API key must not be empty.".to_string());
     }
-    let mut settings = load_settings(app)?;
+    let mut settings = get_settings(app)?;
     settings.gemini_api_key = Some(api_key.to_string());
-    save_settings(app, &settings)
+    set_settings(app, settings)
 }
 
 pub fn clear_gemini_api_key(app: &tauri::AppHandle) -> Result<(), String> {
-    let mut settings = load_settings(app)?;
+    let mut settings = get_settings(app)?;
     settings.gemini_api_key = None;
-    save_settings(app, &settings)
+    set_settings(app, settings)
 }

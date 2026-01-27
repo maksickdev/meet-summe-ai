@@ -336,10 +336,23 @@ fn clear_gemini_api_key(app: tauri::AppHandle) -> Result<(), String> {
 async fn summarize_recording(
     app: tauri::AppHandle,
     recording_id: String,
-    template_id: String,
+    prompt_id: String,
+    note_id: Option<String>,
 ) -> Result<storage::RecordingMetadata, String> {
     let api_key = storage::get_gemini_api_key(&app)?;
-    let meta = storage::load_recording_metadata(&app, &recording_id)?;
+    let mut meta = storage::load_recording_metadata(&app, &recording_id)?;
+
+    // Get prompt text
+    let prompt_text = if let Ok(text) = gemini::template_text(&prompt_id) {
+        text.to_string()
+    } else {
+        // Look in custom prompts
+        let settings = storage::get_settings(&app)?;
+        settings.custom_prompts.as_ref()
+            .and_then(|prompts| prompts.iter().find(|p| p.id == prompt_id))
+            .map(|p| p.content.clone())
+            .ok_or_else(|| format!("Prompt with id {} not found", prompt_id))?
+    };
 
     let audio_path = storage::abs_path(&app, &meta.audio.relative_path)?;
     let audio_mime = gemini::guess_audio_mime_type(&audio_path);
@@ -347,18 +360,49 @@ async fn summarize_recording(
         std::fs::read(&audio_path).map_err(|e| format!("Failed to read audio file: {e}"))?;
 
     let markdown =
-        gemini::summarize_audio_to_markdown(&api_key, audio_bytes, &audio_mime, &template_id)
+        gemini::summarize_audio_to_markdown(&api_key, audio_bytes, &audio_mime, &prompt_text)
             .await?;
 
-    let md_rel = meta
-        .markdown_relative_path
-        .clone()
-        .ok_or_else(|| "Recording has no markdown_relative_path.".to_string())?;
+    let (id_to_use, md_rel) = if let Some(nid) = note_id {
+        // Regeneration
+        let notes = meta.notes.as_mut().ok_or("Notes not initialized")?;
+        let note = notes.iter_mut().find(|n| n.id == nid)
+            .ok_or_else(|| format!("Note with id {} not found", nid))?;
+        (nid, note.relative_path.clone())
+    } else {
+        // New note
+        let nid = uuid::Uuid::new_v4().to_string();
+        let rel = format!("recordings/{}/notes_{}.md", recording_id, nid);
+        (nid, rel)
+    };
+
     let md_path = storage::abs_path(&app, &md_rel)?;
     if let Some(parent) = md_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create output dir: {e}"))?;
     }
     std::fs::write(&md_path, markdown).map_err(|e| format!("Failed to write markdown: {e}"))?;
+
+    if meta.notes.is_none() {
+        meta.notes = Some(Vec::new());
+    }
+    
+    let notes = meta.notes.as_mut().unwrap();
+    if !notes.iter().any(|n| n.id == id_to_use) {
+        notes.push(storage::RecordingNote {
+            id: id_to_use,
+            prompt_id,
+            relative_path: md_rel.clone(),
+            created_at: chrono::Utc::now(),
+        });
+    } else {
+        // Update timestamp for regeneration if desired, or just leave it
+        if let Some(note) = notes.iter_mut().find(|n| n.id == id_to_use) {
+            note.created_at = chrono::Utc::now();
+        }
+    }
+
+    // Update deprecated field for compatibility with older parts of UI if any
+    meta.markdown_relative_path = Some(md_rel);
 
     storage::save_recording_metadata(&app, &meta)?;
     Ok(meta)
@@ -443,17 +487,77 @@ fn stop_recording(
 }
 
 #[tauri::command]
-fn read_recording_note(app: tauri::AppHandle, recording_id: String) -> Result<String, String> {
-    storage::read_recording_note(&app, &recording_id)
+fn read_recording_note(
+    app: tauri::AppHandle,
+    recording_id: String,
+    note_id: Option<String>,
+) -> Result<String, String> {
+    storage::read_recording_note(&app, &recording_id, note_id.as_deref())
 }
 
 #[tauri::command]
 fn save_recording_note(
     app: tauri::AppHandle,
     recording_id: String,
+    note_id: Option<String>,
     content: String,
 ) -> Result<(), String> {
-    storage::save_recording_note(&app, &recording_id, &content)
+    storage::save_recording_note(&app, &recording_id, note_id.as_deref(), &content)
+}
+
+#[tauri::command]
+fn list_custom_prompts(app: tauri::AppHandle) -> Result<Vec<storage::CustomPrompt>, String> {
+    let settings = storage::get_settings(&app)?;
+    Ok(settings.custom_prompts.unwrap_or_default())
+}
+
+#[tauri::command]
+fn create_custom_prompt(
+    app: tauri::AppHandle,
+    name: String,
+    content: String,
+) -> Result<storage::CustomPrompt, String> {
+    let mut settings = storage::get_settings(&app)?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let prompt = storage::CustomPrompt {
+        id,
+        name,
+        content,
+    };
+    
+    let mut prompts = settings.custom_prompts.unwrap_or_default();
+    prompts.push(prompt.clone());
+    settings.custom_prompts = Some(prompts);
+    
+    storage::set_settings(&app, settings)?;
+    Ok(prompt)
+}
+
+#[tauri::command]
+fn update_custom_prompt(
+    app: tauri::AppHandle,
+    id: String,
+    name: String,
+    content: String,
+) -> Result<(), String> {
+    let mut settings = storage::get_settings(&app)?;
+    let prompts = settings.custom_prompts.as_mut().ok_or("No custom prompts found")?;
+    let prompt = prompts.iter_mut().find(|p| p.id == id).ok_or("Prompt not found")?;
+    
+    prompt.name = name;
+    prompt.content = content;
+    
+    storage::set_settings(&app, settings)
+}
+
+#[tauri::command]
+fn delete_custom_prompt(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let mut settings = storage::get_settings(&app)?;
+    let mut prompts = settings.custom_prompts.unwrap_or_default();
+    prompts.retain(|p| p.id != id);
+    settings.custom_prompts = Some(prompts);
+    
+    storage::set_settings(&app, settings)
 }
 
 #[tauri::command]
@@ -660,6 +764,10 @@ pub fn run() {
             stop_recording,
             read_recording_note,
             save_recording_note,
+            list_custom_prompts,
+            create_custom_prompt,
+            update_custom_prompt,
+            delete_custom_prompt,
             get_recording_mode,
             set_recording_mode,
             get_preferred_mic,

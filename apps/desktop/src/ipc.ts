@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { RecordingMetadata } from "./types/recording";
+import type { RecordingMetadata, CustomPrompt } from "./types/recording";
 
 export async function greet(name: string): Promise<string> {
   return await invoke<string>("greet", { name });
@@ -68,17 +68,38 @@ export async function stopRecording(): Promise<RecordingMetadata> {
 
 export async function summarizeRecording(
   recordingId: string,
-  templateId: string,
+  promptId: string,
+  noteId?: string,
 ): Promise<RecordingMetadata> {
-  return await invoke<RecordingMetadata>("summarize_recording", { recordingId, templateId });
+  return await invoke<RecordingMetadata>("summarize_recording", { recordingId, promptId, noteId });
 }
 
-export async function readRecordingNote(recordingId: string): Promise<string> {
-  return await invoke<string>("read_recording_note", { recordingId });
+export async function readRecordingNote(recordingId: string, noteId?: string): Promise<string> {
+  return await invoke<string>("read_recording_note", { recordingId, noteId });
 }
 
-export async function saveRecordingNote(recordingId: string, content: string): Promise<void> {
-  await invoke<void>("save_recording_note", { recordingId, content });
+export async function saveRecordingNote(
+  recordingId: string,
+  content: string,
+  noteId?: string,
+): Promise<void> {
+  await invoke<void>("save_recording_note", { recordingId, content, noteId });
+}
+
+export async function listCustomPrompts(): Promise<CustomPrompt[]> {
+  return await invoke<CustomPrompt[]>("list_custom_prompts");
+}
+
+export async function createCustomPrompt(name: string, content: string): Promise<CustomPrompt> {
+  return await invoke<CustomPrompt>("create_custom_prompt", { name, content });
+}
+
+export async function updateCustomPrompt(id: string, name: string, content: string): Promise<void> {
+  await invoke<void>("update_custom_prompt", { id, name, content });
+}
+
+export async function deleteCustomPrompt(id: string): Promise<void> {
+  await invoke<void>("delete_custom_prompt", { id });
 }
 
 export async function showInFolder(path: string): Promise<void> {
