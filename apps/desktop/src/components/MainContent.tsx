@@ -15,6 +15,7 @@ interface MainContentProps {
   isSummarizing: boolean;
   customPrompts: CustomPrompt[];
   onSummarize: (promptId: string, noteId?: string) => void;
+  onDeleteNote: (noteId: string) => void;
   onShowInFolder: () => void;
 }
 
@@ -39,6 +40,7 @@ export function MainContent({
   isSummarizing,
   customPrompts,
   onSummarize,
+  onDeleteNote,
   onShowInFolder,
 }: MainContentProps) {
   const [activeNoteId, setActiveNoteId] = useState<string | undefined>();
@@ -204,6 +206,7 @@ export function MainContent({
               recordingId={selected.id}
               noteId={activeNoteId}
               onRegenerate={currentNote ? () => onSummarize(currentNote.prompt_id, currentNote.id) : undefined}
+              onDeleteNote={activeNoteId ? () => onDeleteNote(activeNoteId) : undefined}
               isRegenerating={isSummarizing}
             />
           </div>

@@ -30,6 +30,7 @@ import {
   createCustomPrompt,
   updateCustomPrompt,
   deleteCustomPrompt,
+  deleteRecordingNote,
 } from "./ipc";
 
 import type { RecordingMetadata, CustomPrompt } from "./types/recording";
@@ -83,6 +84,9 @@ export default function App() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [recordingToDelete, setRecordingToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [noteDeleteConfirmOpen, setNoteDeleteConfirmOpen] = useState(false);
+  const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
 
   // --- Derived State ---
   const selected = useMemo(
@@ -436,6 +440,28 @@ export default function App() {
     }
   }
 
+  async function onDeleteNote(noteId: string) {
+    setNoteToDelete(noteId);
+    setNoteDeleteConfirmOpen(true);
+  }
+
+  async function confirmNoteDelete() {
+    if (!selected || !noteToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteRecordingNote(selected.id, noteToDelete);
+      await refreshRecordings();
+      setStatus("Note deleted.");
+      setNoteDeleteConfirmOpen(false);
+      setNoteToDelete(null);
+    } catch (e) {
+      console.error(e);
+      setStatus(`Error deleting note: ${String(e)}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   // --- Render ---
 
   return (
@@ -468,6 +494,7 @@ export default function App() {
           isSummarizing={isSummarizing}
           customPrompts={customPrompts}
           onSummarize={onSummarize}
+          onDeleteNote={onDeleteNote}
           onShowInFolder={onShowInFolder}
         />
       </AppLayout>
@@ -517,6 +544,14 @@ export default function App() {
         title="Delete Recording"
         description="Are you sure you want to delete this recording? This action cannot be undone."
         onConfirm={confirmDelete}
+        isLoading={isDeleting}
+      />
+      <ConfirmDialog
+        open={noteDeleteConfirmOpen}
+        onOpenChange={setNoteDeleteConfirmOpen}
+        title="Delete AI Note"
+        description="Are you sure you want to delete this specific AI note? This action cannot be undone."
+        onConfirm={confirmNoteDelete}
         isLoading={isDeleting}
       />
     </div>

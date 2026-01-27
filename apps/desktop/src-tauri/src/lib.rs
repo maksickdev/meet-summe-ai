@@ -506,6 +506,15 @@ fn save_recording_note(
 }
 
 #[tauri::command]
+fn delete_recording_note(
+    app: tauri::AppHandle,
+    recording_id: String,
+    note_id: String,
+) -> Result<(), String> {
+    storage::delete_recording_note(&app, &recording_id, &note_id)
+}
+
+#[tauri::command]
 fn list_custom_prompts(app: tauri::AppHandle) -> Result<Vec<storage::CustomPrompt>, String> {
     let settings = storage::get_settings(&app)?;
     Ok(settings.custom_prompts.unwrap_or_default())
@@ -764,6 +773,7 @@ pub fn run() {
             stop_recording,
             read_recording_note,
             save_recording_note,
+            delete_recording_note,
             list_custom_prompts,
             create_custom_prompt,
             update_custom_prompt,

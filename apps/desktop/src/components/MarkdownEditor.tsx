@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { RotateCcw } from "lucide-react";
+import { Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { readRecordingNote, saveRecordingNote } from "../ipc";
 
 export type MarkdownEditorProps = {
@@ -10,10 +10,11 @@ export type MarkdownEditorProps = {
   noteId?: string; // If provided, load this specific note
   initialPath?: string; // used for backward compatibility or to trigger reload
   onRegenerate?: () => void;
+  onDeleteNote?: () => void;
   isRegenerating?: boolean;
 };
 
-export function MarkdownEditor({ recordingId, noteId, onRegenerate, isRegenerating }: MarkdownEditorProps) {
+export function MarkdownEditor({ recordingId, noteId, onRegenerate, onDeleteNote, isRegenerating }: MarkdownEditorProps) {
   const [content, setContent] = useState<string>("");
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [draft, setDraft] = useState<string>("");
@@ -64,6 +65,17 @@ export function MarkdownEditor({ recordingId, noteId, onRegenerate, isRegenerati
               {isRegenerating ? "Processing..." : "Regenerate"}
             </button>
           )}
+
+          {onDeleteNote && !isEditing && (
+            <button
+              onClick={onDeleteNote}
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-red-600 dark:hover:text-red-400 p-2"
+              title="Delete Note"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+          )}
           {isEditing ? (
             <>
               <button
@@ -87,8 +99,9 @@ export function MarkdownEditor({ recordingId, noteId, onRegenerate, isRegenerati
                 setDraft(content);
                 setIsEditing(true);
               }}
-              className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 disabled:opacity-50 p-2"
             >
+              <Pencil className="w-3.5 h-3.5" />
               Edit
             </button>
           )}

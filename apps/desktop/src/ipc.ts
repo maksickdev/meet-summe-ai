@@ -102,6 +102,10 @@ export async function deleteCustomPrompt(id: string): Promise<void> {
   await invoke<void>("delete_custom_prompt", { id });
 }
 
+export async function deleteRecordingNote(recordingId: string, noteId: string): Promise<void> {
+  await invoke<void>("delete_recording_note", { recordingId, noteId });
+}
+
 export async function showInFolder(path: string): Promise<void> {
   await invoke<void>("show_in_folder", { path });
 }

@@ -314,6 +314,28 @@ pub fn save_recording_note(
     std::fs::write(path, content).map_err(|e| format!("Failed to save note: {e}"))
 }
 
+pub fn delete_recording_note(
+    app: &tauri::AppHandle,
+    id: &str,
+    note_id: &str,
+) -> Result<(), String> {
+    let mut meta = load_recording_metadata(app, id)?;
+    
+    let notes = meta.notes.as_mut().ok_or("Notes not initialized")?;
+    let index = notes.iter().position(|n| n.id == note_id)
+        .ok_or_else(|| format!("Note with id {} not found", note_id))?;
+    
+    let note = notes.remove(index);
+    
+    // Delete file
+    let path = abs_path(app, &note.relative_path)?;
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|e| format!("Failed to delete note file: {e}"))?;
+    }
+    
+    save_recording_metadata(app, &meta)
+}
+
 pub fn abs_path(app: &tauri::AppHandle, relative_path: &str) -> Result<PathBuf, String> {
     Ok(resolve_storage_dir(app)?.join(relative_path))
 }
