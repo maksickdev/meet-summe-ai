@@ -145,7 +145,7 @@ export function MainContent({
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-              <Sparkles className="w-5 h-5 text-purple-500" />
+              <Sparkles className="w-5 h-5 " />
               <span>AI Notes</span>
             </div>
 
@@ -190,7 +190,7 @@ export function MainContent({
                     key={note.id}
                     onClick={() => setActiveNoteId(note.id)}
                     className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${isActive
-                      ? "border-purple-500 text-purple-600 dark:text-purple-400"
+                      ? "border-zinc-200 text-zinc-600 dark:text-zinc-200"
                       : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                       }`}
                   >

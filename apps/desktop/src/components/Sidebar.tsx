@@ -39,16 +39,16 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
 
   function saveRename() {
     if (editingId && editValue.trim()) {
-        onRename(editingId, editValue.trim());
+      onRename(editingId, editValue.trim());
     }
     setEditingId(null);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter") {
-        saveRename();
+      saveRename();
     } else if (e.key === "Escape") {
-        setEditingId(null);
+      setEditingId(null);
     }
   }
 
@@ -61,45 +61,45 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
         </h2>
         <p className="text-xs text-zinc-500 mt-1">{recordings.length} recordings</p>
       </div>
-      
+
       <ScrollArea className="flex-1 bg-transparent">
-          {recordings.length === 0 ? (
-            <div className="p-4 text-center text-sm text-zinc-500">
-              No recordings yet.
-            </div>
-          ) : (
-            <div className="p-2 space-y-1">
+        {recordings.length === 0 ? (
+          <div className="p-4 text-center text-sm text-zinc-500">
+            No recordings yet.
+          </div>
+        ) : (
+          <div className="p-2 space-y-1">
             {recordings.map((rec) => (
               <ContextMenu key={rec.id}>
                 <ContextMenuTrigger>
                   <div
                     onClick={() => {
-                        if (editingId !== rec.id) onSelect(rec.id);
+                      if (editingId !== rec.id) onSelect(rec.id);
                     }}
                     className={cn(
-                      "group w-full text-left p-3 rounded-lg text-sm transition-colors cursor-pointer select-none",
-                      "hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                      "group w-full text-left p-3 mb-2 rounded-lg text-sm cursor-pointer select-none",
+                      "dark:hover:bg-zinc-900",
                       selectedId === rec.id
-                        ? "bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-200 dark:ring-zinc-700 shadow-sm"
-                        : "text-zinc-600 dark:text-zinc-400"
+                        ? "bg-zinc-900 rounded-lg border border-zinc-800 shadow-sm"
+                        : "border border-transparent text-zinc-600 dark:text-zinc-400"
                     )}
                   >
                     {editingId === rec.id ? (
-                        <Input
-                            ref={inputRef}
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onBlur={saveRename}
-                            onKeyDown={handleKeyDown}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-6 w-full px-1 py-0 text-sm bg-transparent border-blue-500"
-                        />
+                      <Input
+                        ref={inputRef}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={saveRename}
+                        onKeyDown={handleKeyDown}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-6 w-full px-1 py-0 text-sm bg-transparent border-blue-500"
+                      />
                     ) : (
-                        <div className="font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                          {rec.title || `Recording ${rec.id.slice(0, 8)}...`}
-                        </div>
+                      <div className="font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                        {rec.title || `Recording ${rec.id.slice(0, 8)}...`}
+                      </div>
                     )}
-                    
+
                     <div className="flex items-center gap-1.5 mt-1.5 text-xs text-zinc-500">
                       <Calendar className="w-3 h-3" />
                       {rec.created_at.split('T')[0]}
@@ -111,28 +111,28 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
                     </div>
                   </div>
                 </ContextMenuTrigger>
-                
+
                 <ContextMenuContent>
-                    <ContextMenuItem 
-                        onSelect={() => startRenaming(rec)}
-                    >
-                      <Edit2 className="mr-2 h-4 w-4" />
-                      Rename
-                    </ContextMenuItem>
-                    <ContextMenuItem 
-                        className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20 dark:text-red-400 dark:focus:text-red-400"
-                        onSelect={() => {
-                          setTimeout(() => onDelete(rec.id), 0);
-                        }}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </ContextMenuItem>
+                  <ContextMenuItem
+                    onSelect={() => startRenaming(rec)}
+                  >
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    Rename
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20 dark:text-red-400 dark:focus:text-red-400"
+                    onSelect={() => {
+                      setTimeout(() => onDelete(rec.id), 0);
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
             ))}
-            </div>
-          )}
+          </div>
+        )}
       </ScrollArea>
     </div>
   );

@@ -33,7 +33,7 @@ export function Header({
         <div className="flex h-12 w-12 items-center justify-center">
           <img src={logo} alt="Summerizer" className="w-full h-full object-cover" />
         </div>
-        <span>sum<span className="text-blue-800">me</span></span>
+        <span>sum<span className="text-blue-600">me</span></span>
       </div>
 
       <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50/50 p-1 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/50 shadow-sm">
