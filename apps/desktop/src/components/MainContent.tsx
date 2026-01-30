@@ -201,7 +201,7 @@ export function MainContent({
             </div>
           )}
 
-          <div className="flex h-[500px] flex-col rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
+          <div className="flex min-h-[500px] flex-col rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
             <MarkdownEditor
               recordingId={selected.id}
               noteId={activeNoteId}

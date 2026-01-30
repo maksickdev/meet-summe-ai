@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -19,6 +19,15 @@ export function MarkdownEditor({ recordingId, noteId, onRegenerate, onDeleteNote
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [draft, setDraft] = useState<string>("");
   const [status, setStatus] = useState<string>("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [draft, isEditing]);
 
   useEffect(() => {
     loadNote();
@@ -49,7 +58,7 @@ export function MarkdownEditor({ recordingId, noteId, onRegenerate, onDeleteNote
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div className="text-xs font-semibold uppercase text-zinc-500">
           Notes {status && <span className="font-normal text-zinc-400">({status})</span>}
@@ -108,12 +117,13 @@ export function MarkdownEditor({ recordingId, noteId, onRegenerate, onDeleteNote
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col min-h-0 p-4">
+      <div className="flex flex-col p-4">
         {isEditing ? (
           <textarea
+            ref={textareaRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="w-full flex-1 resize-none bg-transparent font-mono text-sm outline-none dark:text-zinc-50"
+            className="w-full resize-none overflow-hidden bg-transparent font-mono text-sm outline-none dark:text-zinc-50"
           />
         ) : content ? (
           <div className="prose prose-sm dark:prose-invert max-w-none">

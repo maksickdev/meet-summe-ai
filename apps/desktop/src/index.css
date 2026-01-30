@@ -1,4 +1,9 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
 
 :root {
   color-scheme: light dark;
@@ -11,4 +16,12 @@ body {
 
 body {
   margin: 0;
+}
+
+/* Custom styles for Markdown */
+.prose {
+  --tw-prose-headings: var(--color-zinc-200);
+  --tw-prose-bold: var(--color-zinc-200);
+  --tw-prose-italic: var(--color-zinc-200);
+  --tw-prose-body: var(--color-zinc-400);
 }
