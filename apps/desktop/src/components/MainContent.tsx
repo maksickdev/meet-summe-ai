@@ -103,6 +103,8 @@ export function MainContent({
             </Button>
           </div>
 
+          <Separator />
+
           <div className="space-y-6">
             {[...selected.audio_parts]
               .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
