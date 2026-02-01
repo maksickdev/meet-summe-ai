@@ -34,7 +34,7 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
 
   function startRenaming(rec: RecordingMetadata) {
     setEditingId(rec.id);
-    setEditValue(rec.title || `Recording ${rec.id.slice(0, 8)}...`);
+    setEditValue(rec.title || `Recording ${rec.id}`);
   }
 
   function saveRename() {
@@ -92,11 +92,11 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
                         onBlur={saveRename}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="h-6 w-full px-1 py-0 text-sm bg-transparent border-blue-500"
+                        className="h-6 w-full px-1 py-0 text-sm bg-transparent border-blue-500 "
                       />
                     ) : (
-                      <div className="font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                        {rec.title || `Recording ${rec.id.slice(0, 8)}...`}
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                        {rec.title || `Recording ${rec.id}`}
                       </div>
                     )}
 

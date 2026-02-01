@@ -36,8 +36,8 @@ export function StartRecordingDialog({
 
                 <div className="grid gap-4 py-4">
                     <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800 min-w-0">
-                        <div className="text-sm text-zinc-100 mb-1">Selected Recording</div>
-                        <div className="text-sm text-zinc-500 truncate">{existingTitle}</div>
+                        <div className="text-sm font-medium text-zinc-100 mb-1">Selected Recording</div>
+                        <div className="text-xs text-zinc-500 truncate">{existingTitle}</div>
                     </div>
                 </div>
 
