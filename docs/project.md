@@ -67,13 +67,13 @@ summe uses a **Tauri** application shell:
 
 ### High-level components
 
-- **Recording Engine (Rust)**: captures system output + microphone, performs real-time mixing (AEC + AGC), and handles post-recording cleanup/renaming based on the selected mode.
-- **Processing Pipeline**:
+- **Recording Engine (Rust)**: captures system output + microphone, performs real-time mixing (AEC + AGC), and handles post-recording cleanup/renaming. Supports multi-segment recordings by appending new parts to existing metadata.
+- **Processing Pipeline (Incremental)**:
   - optional: audio normalization/splitting
-  - upload audio or transcript to Gemini
+  - segment-by-segment summarization: sends each part to Gemini along with the previous part's summary for context-aware updates.
   - post-process results into Markdown format
-- **Metadata Store**: persistent index of recordings (JSON) + settings (store plugin or JSON).
-- **UI Layer**: recording controls, status/progress, playback, preview, editing, export.
+- **Metadata Store**: persistent index of recordings (JSON) containing an array of `audio_parts` + settings (JSON).
+- **UI Layer**: recording controls with multi-part support (Start New/Continue), status/progress, list of players per segment, preview, editing, export.
 - **OS Integrations**: tray status (timer, dynamic menu), global shortcuts with dynamic re-registration, notifications, close-to-tray logic.
 
 ### Data flow (record → summarize)
@@ -137,29 +137,45 @@ This keeps data portable and Obsidian-friendly.
 {
   "id": "2026-01-14T12-30-00Z_abc123",
   "created_at": "2026-01-14T12:30:00Z",
-  "title": null,
-  "audio": {
-    "relative_path": "recordings/2026-01-14.../mic.mp3",
-    "duration_ms": 3600000,
-    "format": "mp3",
-    "sample_rate": 48000,
-    "channels": 2
-  },
-  "system_audio": {
-    "relative_path": "recordings/2026-01-14.../system.mp3",
-    "duration_ms": 3600000,
-    "format": "mp3",
-    "sample_rate": 48000,
-    "channels": 2
-  },
-  "merged_audio": {
-    "relative_path": "recordings/2026-01-14.../merged.mp3",
-    "duration_ms": 3600000,
-    "format": "mp3",
-    "sample_rate": 48000,
-    "channels": 2
-  },
-  "markdown_relative_path": "recordings/2026-01-14.../notes.md"
+  "title": "Meeting Title",
+  "audio_parts": [
+    {
+      "id": "abc123_part1",
+      "created_at": "2026-01-14T12:30:00Z",
+      "mic": {
+        "relative_path": "recordings/.../mic.mp3",
+        "duration_ms": 600000,
+        "format": "mp3",
+        "sample_rate": 48000,
+        "channels": 2
+      },
+      "system": null,
+      "merged": null
+    },
+    {
+      "id": "abc123_part2",
+      "created_at": "2026-01-14T12:45:00Z",
+      "mic": {
+        "relative_path": "recordings/.../mic_1.mp3",
+        "duration_ms": 300000,
+        "format": "mp3",
+        "sample_rate": 48000,
+        "channels": 2
+      },
+      "system": null,
+      "merged": null
+    }
+  ],
+  "audio": { "relative_path": "...", "duration_ms": 600000 },
+  "markdown_relative_path": "recordings/.../notes.md",
+  "notes": [
+    {
+      "id": "note_uuid",
+      "prompt_id": "meeting_notes",
+      "relative_path": "recordings/.../notes_uuid.md",
+      "created_at": "2026-01-14T13:00:00Z"
+    }
+  ]
 }
 ```
 
@@ -178,9 +194,9 @@ This keeps data portable and Obsidian-friendly.
   - **Sidebar (Left)**: Scrollable list of recordings with metadata (date, duration). Supports right-click context menu for Rename/Delete.
   - **Header (Top)**: Global recording controls (Start/Stop/Pause), real-time recording timer (`HH:MM:SS`), status indicator (pulsing red/solid amber), and Settings trigger.
   - **Main Content (Right)**:
-    - **Audio Player**: Multi-track playback (Mic, System, Merged). In "Merged" mode, a single player stretches to full width.
-    - **Summarization**: Controls to generate AI summaries.
-    - **Editor**: Markdown editor for transcript/notes.
+    - **Session Playlist**: A vertical list of all audio segments recorded in this session. Each segment has its own player, timestamp, and label (e.g., "Part 1").
+    - **Summarization**: Controls to generate AI summaries. If multiple parts exist, incremental summarization is used.
+    - **Editor**: Markdown editor for transcript/notes. Supports multiple versions of notes.
 - **Settings (Dialog)**:
   - Storage directory configuration.
   - Audio device selection and merge options.

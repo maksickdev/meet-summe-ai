@@ -41,6 +41,7 @@ import { Header } from "./components/Header";
 import { MainContent } from "./components/MainContent";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { StartRecordingDialog } from "./components/StartRecordingDialog";
 
 function joinPaths(base: string, relative: string): string {
   const b = base.replace(/\/+$/, "");
@@ -88,6 +89,8 @@ export default function App() {
   const [noteDeleteConfirmOpen, setNoteDeleteConfirmOpen] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
 
+  const [startRecordingChoiceOpen, setStartRecordingChoiceOpen] = useState(false);
+
   // --- Derived State ---
   const selected = useMemo(
     () => recordings.find((r) => r.id === selectedId) ?? null,
@@ -95,8 +98,8 @@ export default function App() {
   );
 
   const selectedAbsAudioPath = useMemo(() => {
-    if (!selected) return "";
-    return joinPaths(storageDir, selected.audio.relative_path);
+    if (!selected || selected.audio_parts.length === 0) return "";
+    return joinPaths(storageDir, selected.audio_parts[0].mic.relative_path);
   }, [selected, storageDir]);
 
   // --- Effects ---
@@ -274,11 +277,20 @@ export default function App() {
   }
 
   async function onStart() {
+    if (selected && recState === "idle") {
+      setStartRecordingChoiceOpen(true);
+    } else {
+      await performStart(null);
+    }
+  }
+
+  async function performStart(existingId?: string | null) {
     try {
-      const meta = await startRecording(micDevice || null);
+      setStartRecordingChoiceOpen(false);
+      const meta = await startRecording(micDevice || null, existingId);
       setRecState("recording");
       setSelectedId(meta.id);
-      setStatus("Recording started.");
+      setStatus(existingId ? `Appending to recording: ${meta.title || meta.id}` : "Started new recording.");
       setStartTime(Date.now());
       setAccumulatedDuration(0);
     } catch (e) {
@@ -553,6 +565,13 @@ export default function App() {
         description="Are you sure you want to delete this specific AI note? This action cannot be undone."
         onConfirm={confirmNoteDelete}
         isLoading={isDeleting}
+      />
+      <StartRecordingDialog
+        open={startRecordingChoiceOpen}
+        onOpenChange={setStartRecordingChoiceOpen}
+        onStartNew={() => performStart(null)}
+        onContinue={() => performStart(selected?.id)}
+        existingTitle={selected?.title || selected?.id || ""}
       />
     </div>
   );

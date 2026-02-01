@@ -23,15 +23,26 @@ pub struct RecordingNote {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioSet {
+    pub id: String,
+    pub created_at: DateTime<Utc>,
+    pub mic: RecordingAudioInfo,
+    pub system: Option<RecordingAudioInfo>,
+    pub merged: Option<RecordingAudioInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingMetadata {
     pub id: String,
     pub created_at: DateTime<Utc>,
     pub title: Option<String>,
-    pub audio: RecordingAudioInfo,               // Microphone audio (primary)
-    pub system_audio: Option<RecordingAudioInfo>, // System audio (optional)
-    pub merged_audio: Option<RecordingAudioInfo>, // Merged audio (optional)
+    #[serde(default)]
+    pub audio_parts: Vec<AudioSet>,               // Support for multiple parts
+    pub audio: Option<RecordingAudioInfo>,        // Microphone audio (primary) - Deprecated
+    pub system_audio: Option<RecordingAudioInfo>, // System audio (optional) - Deprecated
+    pub merged_audio: Option<RecordingAudioInfo>, // Merged audio (optional) - Deprecated
     pub markdown_relative_path: Option<String>,   // Deprecated: used for single note mode
-    pub notes: Option<Vec<RecordingNote>>,       // Multiple notes
+    pub notes: Option<Vec<RecordingNote>>,        // Multiple notes
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,41 +94,93 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
     let merged_audio_relative_path = format!("recordings/{id}/merged.mp3");
     let markdown_relative_path = Some(format!("recordings/{id}/notes.md"));
 
-    let settings = get_settings(app)?;
-    let mode = settings.recording_mode.as_deref().unwrap_or("merged");
-
     // We always create paths for system and merged tracks during recording 
     // to allow backend to perform AEC and merging. 
     // We will clean up files in do_stop_recording if mode is "merged".
     
+    let mic_info = RecordingAudioInfo {
+        relative_path: audio_relative_path,
+        duration_ms: None,
+        format: "mp3".to_string(),
+        sample_rate: 48_000,
+        channels: 2,
+    };
+    let system_info = Some(RecordingAudioInfo {
+        relative_path: system_audio_relative_path,
+        duration_ms: None,
+        format: "mp3".to_string(),
+        sample_rate: 48_000,
+        channels: 2,
+    });
+    let merged_info = Some(RecordingAudioInfo {
+        relative_path: merged_audio_relative_path,
+        duration_ms: None,
+        format: "mp3".to_string(),
+        sample_rate: 48_000,
+        channels: 2,
+    });
+
     let meta = RecordingMetadata {
-        id,
+        id: id.clone(),
         created_at,
         title: None,
-        audio: RecordingAudioInfo {
-            relative_path: audio_relative_path,
-            duration_ms: None,
-            format: "mp3".to_string(),
-            sample_rate: 48_000,
-            channels: 2,
-        },
-        system_audio: Some(RecordingAudioInfo {
-            relative_path: system_audio_relative_path,
-            duration_ms: None,
-            format: "mp3".to_string(),
-            sample_rate: 48_000,
-            channels: 2,
-        }),
-        merged_audio: Some(RecordingAudioInfo {
-            relative_path: merged_audio_relative_path,
-            duration_ms: None,
-            format: "mp3".to_string(),
-            sample_rate: 48_000,
-            channels: 2,
-        }),
+        audio_parts: vec![AudioSet {
+            id,
+            created_at,
+            mic: mic_info.clone(),
+            system: system_info.clone(),
+            merged: merged_info.clone(),
+        }],
+        audio: Some(mic_info),
+        system_audio: system_info,
+        merged_audio: merged_info,
         markdown_relative_path,
         notes: Some(Vec::new()),
     };
+
+    save_recording_metadata(app, &meta)?;
+    Ok(meta)
+}
+
+pub fn add_part_to_recording(app: &tauri::AppHandle, recording_id: &str) -> Result<RecordingMetadata, String> {
+    let mut meta = load_recording_metadata(app, recording_id)?;
+    let created_at = Utc::now();
+    let part_id = Uuid::new_v4().to_string();
+    
+    let part_index = meta.audio_parts.len();
+    let audio_relative_path = format!("recordings/{recording_id}/mic_{part_index}.mp3");
+    let system_audio_relative_path = format!("recordings/{recording_id}/system_{part_index}.mp3");
+    let merged_audio_relative_path = format!("recordings/{recording_id}/merged_{part_index}.mp3");
+
+    let mic_info = RecordingAudioInfo {
+        relative_path: audio_relative_path,
+        duration_ms: None,
+        format: "mp3".to_string(),
+        sample_rate: 48_000,
+        channels: 2,
+    };
+    let system_info = Some(RecordingAudioInfo {
+        relative_path: system_audio_relative_path,
+        duration_ms: None,
+        format: "mp3".to_string(),
+        sample_rate: 48_000,
+        channels: 2,
+    });
+    let merged_info = Some(RecordingAudioInfo {
+        relative_path: merged_audio_relative_path,
+        duration_ms: None,
+        format: "mp3".to_string(),
+        sample_rate: 48_000,
+        channels: 2,
+    });
+
+    meta.audio_parts.push(AudioSet {
+        id: part_id,
+        created_at,
+        mic: mic_info,
+        system: system_info,
+        merged: merged_info,
+    });
 
     save_recording_metadata(app, &meta)?;
     Ok(meta)
@@ -221,6 +284,19 @@ pub fn load_recording_metadata(
     let path = recording_dir(app, id)?.join("metadata.json");
     let bytes = std::fs::read(&path).map_err(|e| format!("Failed to read metadata: {e}"))?;
     let mut meta: RecordingMetadata = serde_json::from_slice(&bytes).map_err(|e| format!("Invalid metadata.json: {e}"))?;
+
+    // Migration: if audio_parts is empty but we have old audio info, move it to audio_parts
+    if meta.audio_parts.is_empty() {
+        if let Some(mic) = meta.audio.clone() {
+            meta.audio_parts.push(AudioSet {
+                id: meta.id.clone(),
+                created_at: meta.created_at,
+                mic,
+                system: meta.system_audio.clone(),
+                merged: meta.merged_audio.clone(),
+            });
+        }
+    }
 
     // Migration: if notes is None but we have a deprecated markdown path, move it to notes
     if meta.notes.is_none() {

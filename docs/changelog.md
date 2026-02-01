@@ -1,3 +1,21 @@
+## [2026-02-01] - Multi-segment Sessions & Incremental AI
+### Added
+- **Multi-segment Support**: A single recording can now consist of multiple audio parts (sessions), allowing users to pause for long periods or record different phases of a meeting under one project.
+- **Start Choice**: When starting a new recording while another is selected, a choice dialog appears: "Start New" or "Continue [Title]".
+- **Incremental Summarization**: The AI engine now processes recordings segment by segment in chronological order. Each subsequent part is summarized with the context of the previous parts' summary, producing a cohesive final document.
+- **Enhanced UI**: 
+  - Sidebar now displays total session duration and the number of recording parts.
+  - Main view lists all audio segments with individual players and timestamps.
+- **New Recording Part Logic**: Implemented `add_part_to_recording` in the backend to manage file paths and metadata for additional segments.
+
+### Changed
+- **Data Model Migration**: Refactored `RecordingMetadata` to use a list-based `audio_parts` structure while maintaining backward compatibility with single-file recordings.
+- **Gemini Engine**: Updated the `summarize_audio_to_markdown` function to accept an optional `previous_summary` for context injection during incremental processing.
+
+### Fixed
+- **Post-processing Bug**: Fixed a critical issue where multi-segment files (e.g., `mic_1.mp3`) were incorrectly deleted in "Merged" mode due to failed string replacement logic.
+- **Unused Imports & Variables**: Cleaned up remaining compiler warnings in `lib.rs` and `storage/mod.rs`.
+
 ## [2026-01-26] - Unified Recording Modes & Cleanup
 ### Added
 - **Recording Modes**: Replaced the "Merge (Beta)" toggle with a high-level `Recording Mode` setting:

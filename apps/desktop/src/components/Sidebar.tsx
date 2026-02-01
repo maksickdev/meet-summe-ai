@@ -103,11 +103,21 @@ export function Sidebar({ recordings, selectedId, onSelect, onDelete, onRename, 
                     <div className="flex items-center gap-1.5 mt-1.5 text-xs text-zinc-500">
                       <Calendar className="w-3 h-3" />
                       {rec.created_at.split('T')[0]}
-                      {rec.audio.duration_ms ? (
-                        <span className="ml-auto font-mono">
-                          {Math.round(rec.audio.duration_ms / 1000)}s
-                        </span>
-                      ) : null}
+                      {rec.audio_parts.length > 1 && (
+                        <>
+                          <span>•</span>
+                          <span>{rec.audio_parts.length} parts</span>
+                        </>
+                      )}
+                      {(() => {
+                        const totalMs = rec.audio_parts.reduce((acc, p) => acc + (p.mic.duration_ms || 0), 0);
+                        if (totalMs === 0) return null;
+                        return (
+                          <span className="ml-auto font-mono">
+                            {Math.round(totalMs / 1000)}s
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 </ContextMenuTrigger>

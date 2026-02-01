@@ -6,6 +6,14 @@ export type RecordingAudioInfo = {
   channels: number;
 };
 
+export type AudioSet = {
+  id: string; // Unique ID for this part
+  created_at: string;
+  mic: RecordingAudioInfo;
+  system?: RecordingAudioInfo | null;
+  merged?: RecordingAudioInfo | null;
+};
+
 export type RecordingNote = {
   id: string;
   prompt_id: string;
@@ -17,11 +25,14 @@ export type RecordingMetadata = {
   id: string;
   created_at: string;
   title: string | null;
-  audio: RecordingAudioInfo;
+  audio_parts: AudioSet[]; // Support for multiple parts
+  notes?: RecordingNote[] | null;
+
+  // Deprecated fields for backward compatibility
+  audio?: RecordingAudioInfo;
   system_audio?: RecordingAudioInfo | null;
   merged_audio?: RecordingAudioInfo | null;
-  markdown_relative_path: string | null; // Deprecated
-  notes?: RecordingNote[] | null;
+  markdown_relative_path: string | null;
 };
 
 export type CustomPrompt = {

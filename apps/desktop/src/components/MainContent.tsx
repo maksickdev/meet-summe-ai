@@ -71,14 +71,7 @@ export function MainContent({
     );
   }
 
-  const selectedAbsAudioPath = joinPaths(storageDir, selected.audio.relative_path);
-  const selectedAbsSystemAudioPath = selected.system_audio
-    ? joinPaths(storageDir, selected.system_audio.relative_path)
-    : null;
-  const selectedAbsMergedAudioPath = selected.merged_audio
-    ? joinPaths(storageDir, selected.merged_audio.relative_path)
-    : null;
-
+  const totalDurationMs = selected.audio_parts.reduce((acc, part) => acc + (part.mic.duration_ms || 0), 0);
   const currentNote = selected.notes?.find(n => n.id === activeNoteId);
 
   return (
@@ -96,7 +89,7 @@ export function MainContent({
                 <span>{new Date(selected.created_at).toLocaleString()}</span>
                 <span>•</span>
                 <span className="font-mono text-xs bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
-                  {Math.round((selected.audio.duration_ms || 0) / 1000)}s
+                  {Math.round(totalDurationMs / 1000)}s
                 </span>
               </div>
             </div>
@@ -110,32 +103,51 @@ export function MainContent({
             </Button>
           </div>
 
-          <div className={`grid gap-4 ${(!selected.system_audio && !selected.merged_audio) ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
-            <div className={`rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50 ${(!selected.system_audio && !selected.merged_audio) ? 'col-span-full' : ''}`}>
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                <Mic className="w-3 h-3" />
-                {(!selected.system_audio && !selected.merged_audio) ? "Recording" : "Microphone"}
-              </div>
-              <AudioPlayer absolutePath={selectedAbsAudioPath} />
-            </div>
+          <div className="space-y-6">
+            {[...selected.audio_parts]
+              .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+              .map((part, index) => {
+                const absMicPath = joinPaths(storageDir, part.mic.relative_path);
+                const absSystemPath = part.system ? joinPaths(storageDir, part.system.relative_path) : null;
+                const absMergedPath = part.merged ? joinPaths(storageDir, part.merged.relative_path) : null;
 
-            {selectedAbsSystemAudioPath && selected.system_audio && (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
-                <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  <Bot className="w-3 h-3" /> System Audio
-                </div>
-                <AudioPlayer absolutePath={selectedAbsSystemAudioPath} />
-              </div>
-            )}
+                return (
+                  <div key={part.id || index} className="space-y-3">
+                    {selected.audio_parts.length > 1 && (
+                      <div className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase flex items-center gap-2">
+                        <Plus className="w-3 h-3" /> Part {index + 1} — {new Date(part.created_at).toLocaleTimeString()}
+                      </div>
+                    )}
+                    <div className={`grid gap-4 ${(!part.system && !part.merged) ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+                      <div className={`rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50 ${(!part.system && !part.merged) ? 'col-span-full' : ''}`}>
+                        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                          <Mic className="w-3 h-3" />
+                          {(!part.system && !part.merged) ? "Recording" : "Microphone"}
+                        </div>
+                        <AudioPlayer absolutePath={absMicPath} />
+                      </div>
 
-            {selectedAbsMergedAudioPath && selected.merged_audio && (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
-                <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  <FileText className="w-3 h-3" /> Merged Audio
-                </div>
-                <AudioPlayer absolutePath={selectedAbsMergedAudioPath} />
-              </div>
-            )}
+                      {absSystemPath && part.system && (
+                        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                            <Bot className="w-3 h-3" /> System Audio
+                          </div>
+                          <AudioPlayer absolutePath={absSystemPath} />
+                        </div>
+                      )}
+
+                      {absMergedPath && part.merged && (
+                        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                            <FileText className="w-3 h-3" /> Merged Audio
+                          </div>
+                          <AudioPlayer absolutePath={absMergedPath} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </section>
 

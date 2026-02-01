@@ -42,18 +42,27 @@ pub async fn summarize_audio_to_markdown(
     audio_bytes: Vec<u8>,
     audio_mime: &str,
     prompt_text: &str,
+    previous_summary: Option<&str>,
 ) -> Result<String, String> {
     // Gemini Generative Language API: send audio as inlineData.
-    // We intentionally keep the response as plain text Markdown.
     let audio_b64 = STANDARD.encode(audio_bytes);
+
+    let final_prompt = if let Some(prev) = previous_summary {
+        format!(
+            "Below is the current summary of the previous parts of the meeting:\n\n---\n{}\n---\n\nUsing the instructions from the original prompt below, update and supplement this summary based on the new audio part provided.\n\nOriginal Prompt:\n{}",
+            prev, prompt_text
+        )
+    } else {
+        prompt_text.to_string()
+    };
 
     let body = json!({
       "contents": [
         {
           "role": "user",
           "parts": [
-            {"text": prompt_text},
-            {"text": "\n\nNow process the provided audio and return ONLY the Markdown note."},
+            {"text": &final_prompt},
+            {"text": "\n\nNow process the provided audio and return the updated Markdown note. Return ONLY the Markdown without any extra text."},
             {"inlineData": {"mimeType": audio_mime, "data": audio_b64}}
           ]
         }
@@ -90,7 +99,6 @@ pub async fn summarize_audio_to_markdown(
     let v: serde_json::Value =
         serde_json::from_str(&raw).map_err(|e| format!("Invalid Gemini JSON response: {e}"))?;
 
-    // Extract first candidate -> content -> parts -> text.
     let text = v
         .get("candidates")
         .and_then(|c| c.get(0))

@@ -50,8 +50,11 @@ export async function clearGeminiApiKey(): Promise<void> {
   await invoke<void>("clear_gemini_api_key");
 }
 
-export async function startRecording(micDeviceName: string | null): Promise<RecordingMetadata> {
-  return await invoke<RecordingMetadata>("start_recording", { micDeviceName });
+export async function startRecording(
+  micDeviceName: string | null,
+  existingId?: string | null,
+): Promise<RecordingMetadata> {
+  return await invoke<RecordingMetadata>("start_recording", { micDeviceName, existingId });
 }
 
 export async function pauseRecording(): Promise<void> {

@@ -18,7 +18,7 @@ use tauri::{
     Emitter,
     Manager,
 };
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 
 struct ActiveRecording {
@@ -85,6 +85,7 @@ fn do_start_recording(
     app: &tauri::AppHandle,
     state: &AppState,
     mic_device_name: Option<String>,
+    existing_id: Option<String>,
 ) -> Result<storage::RecordingMetadata, String> {
     let mut guard = state.recording.lock();
     if guard.is_some() {
@@ -101,15 +102,20 @@ fn do_start_recording(
         storage::get_preferred_mic(app).unwrap_or(None)
     };
 
-    let meta = storage::create_new_recording(app)?;
-    let audio_path = storage::abs_path(app, &meta.audio.relative_path)?;
-    let system_audio_path = meta
-        .system_audio
+    let meta = if let Some(eid) = existing_id {
+        storage::add_part_to_recording(app, &eid)?
+    } else {
+        storage::create_new_recording(app)?
+    };
+
+    let part = meta.audio_parts.last().ok_or("No audio parts created")?;
+    
+    let audio_path = storage::abs_path(app, &part.mic.relative_path)?;
+    let system_audio_path = part.system
         .as_ref()
         .map(|s| storage::abs_path(app, &s.relative_path))
         .transpose()?;
-    let merged_audio_path = meta
-        .merged_audio
+    let merged_audio_path = part.merged
         .as_ref()
         .map(|s| storage::abs_path(app, &s.relative_path))
         .transpose()?;
@@ -197,56 +203,64 @@ fn do_stop_recording(
     let result = active.session.stop()?;
 
     let mut meta = active.meta;
-    meta.audio.duration_ms = Some(result.duration_ms);
-    meta.audio.sample_rate = result.sample_rate;
-    meta.audio.channels = result.channels;
+    // Update the last part (which is the one we just recorded)
+    if let Some(part) = meta.audio_parts.last_mut() {
+        part.mic.duration_ms = Some(result.duration_ms);
+        part.mic.sample_rate = result.sample_rate;
+        part.mic.channels = result.channels;
 
-    if let Some(sys) = &mut meta.system_audio {
-        sys.duration_ms = Some(result.duration_ms);
-        sys.sample_rate = result.sample_rate;
-        sys.channels = result.channels;
+        if let Some(sys) = &mut part.system {
+            sys.duration_ms = Some(result.duration_ms);
+            sys.sample_rate = result.sample_rate;
+            sys.channels = result.channels;
+        }
+
+        if let Some(merged) = &mut part.merged {
+            merged.duration_ms = Some(result.duration_ms);
+            merged.sample_rate = result.sample_rate;
+            merged.channels = result.channels;
+        }
+
+        // Handle recording mode: if "merged", delete extra files and keep only the merged one as the main audio.
+        let mode = storage::get_recording_mode(app).unwrap_or_else(|_| "merged".to_string());
+        if mode == "merged" {
+            let old_mic_path = storage::abs_path(app, &part.mic.relative_path)?;
+            let system_path = part.system.as_ref().and_then(|s| storage::abs_path(app, &s.relative_path).ok());
+            let merged_path = part.merged.as_ref().and_then(|s| storage::abs_path(app, &s.relative_path).ok());
+
+            // New relative path for merged mode
+            // Replace 'mic' with 'recording' to handle both 'mic.mp3' and 'mic_1.mp3'
+            let new_rel_path = part.mic.relative_path.replace("mic", "recording");
+            let new_abs_path = storage::abs_path(app, &new_rel_path)?;
+
+            if let Some(m_path) = merged_path {
+                if m_path.exists() {
+                    let _ = std::fs::rename(&m_path, &new_abs_path);
+                }
+            }
+
+            // Delete original mic file only if it's different from the new path
+            if old_mic_path.exists() && old_mic_path != new_abs_path {
+                let _ = std::fs::remove_file(&old_mic_path);
+            }
+
+            if let Some(s_path) = system_path {
+                if s_path.exists() {
+                    let _ = std::fs::remove_file(s_path);
+                }
+            }
+
+            part.mic.relative_path = new_rel_path;
+            part.system = None;
+            part.merged = None;
+        }
     }
 
-    if let Some(merged) = &mut meta.merged_audio {
-        merged.duration_ms = Some(result.duration_ms);
-        merged.sample_rate = result.sample_rate;
-        merged.channels = result.channels;
-    }
-
-    // Handle recording mode: if "merged", delete extra files and keep only the merged one as the main audio.
-    let mode = storage::get_recording_mode(app).unwrap_or_else(|_| "merged".to_string());
-    if mode == "merged" {
-        let old_mic_path = storage::abs_path(app, &meta.audio.relative_path)?;
-        let system_path = meta.system_audio.as_ref().and_then(|s| storage::abs_path(app, &s.relative_path).ok());
-        let merged_path = meta.merged_audio.as_ref().and_then(|s| storage::abs_path(app, &s.relative_path).ok());
-
-        // New relative path for merged mode
-        let new_rel_path = meta.audio.relative_path.replace("mic.mp3", "recording.mp3");
-        let new_abs_path = storage::abs_path(app, &new_rel_path)?;
-
-        if let Some(m_path) = merged_path {
-            if m_path.exists() {
-                // Rename merged to recording.mp3
-                let _ = std::fs::rename(&m_path, &new_abs_path);
-            }
-        }
-
-        // Delete original mic file
-        if old_mic_path.exists() {
-            let _ = std::fs::remove_file(&old_mic_path);
-        }
-
-        // Delete system file if it exists
-        if let Some(s_path) = system_path {
-            if s_path.exists() {
-                let _ = std::fs::remove_file(s_path);
-            }
-        }
-
-        // Update metadata to reflect that only one file remains and its name is recording.mp3
-        meta.audio.relative_path = new_rel_path;
-        meta.system_audio = None;
-        meta.merged_audio = None;
+    // Keep deprecated fields in sync for now (using the first part's data)
+    if let Some(first) = meta.audio_parts.first() {
+        meta.audio = Some(first.mic.clone());
+        meta.system_audio = first.system.clone();
+        meta.merged_audio = first.merged.clone();
     }
 
     storage::save_recording_metadata(app, &meta)?;
@@ -342,6 +356,14 @@ async fn summarize_recording(
     let api_key = storage::get_gemini_api_key(&app)?;
     let mut meta = storage::load_recording_metadata(&app, &recording_id)?;
 
+    // Sort parts chronologically (oldest to newest)
+    let mut parts = meta.audio_parts.clone();
+    parts.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+
+    if parts.is_empty() {
+        return Err("No audio parts found for this recording.".to_string());
+    }
+
     // Get prompt text
     let prompt_text = if let Ok(text) = gemini::template_text(&prompt_id) {
         text.to_string()
@@ -354,14 +376,27 @@ async fn summarize_recording(
             .ok_or_else(|| format!("Prompt with id {} not found", prompt_id))?
     };
 
-    let audio_path = storage::abs_path(&app, &meta.audio.relative_path)?;
-    let audio_mime = gemini::guess_audio_mime_type(&audio_path);
-    let audio_bytes =
-        std::fs::read(&audio_path).map_err(|e| format!("Failed to read audio file: {e}"))?;
+    let mut current_markdown: Option<String> = None;
 
-    let markdown =
-        gemini::summarize_audio_to_markdown(&api_key, audio_bytes, &audio_mime, &prompt_text)
-            .await?;
+    for (i, part) in parts.iter().enumerate() {
+        println!("[AI] Processing part {}/{} (id: {})", i + 1, parts.len(), part.id);
+        
+        let audio_path = storage::abs_path(&app, &part.mic.relative_path)?;
+        let audio_mime = gemini::guess_audio_mime_type(&audio_path);
+        let audio_bytes = std::fs::read(&audio_path).map_err(|e| format!("Failed to read audio file: {e}"))?;
+
+        let result = gemini::summarize_audio_to_markdown(
+            &api_key, 
+            audio_bytes, 
+            &audio_mime, 
+            &prompt_text, 
+            current_markdown.as_deref()
+        ).await?;
+
+        current_markdown = Some(result);
+    }
+
+    let markdown = current_markdown.ok_or("Failed to generate markdown")?;
 
     let (id_to_use, md_rel) = if let Some(nid) = note_id {
         // Regeneration
@@ -395,15 +430,12 @@ async fn summarize_recording(
             created_at: chrono::Utc::now(),
         });
     } else {
-        // Update timestamp for regeneration if desired, or just leave it
         if let Some(note) = notes.iter_mut().find(|n| n.id == id_to_use) {
             note.created_at = chrono::Utc::now();
         }
     }
 
-    // Update deprecated field for compatibility with older parts of UI if any
     meta.markdown_relative_path = Some(md_rel);
-
     storage::save_recording_metadata(&app, &meta)?;
     Ok(meta)
 }
@@ -456,8 +488,9 @@ fn start_recording(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     mic_device_name: Option<String>,
+    existing_id: Option<String>,
 ) -> Result<storage::RecordingMetadata, String> {
-    do_start_recording(&app, &state, mic_device_name)
+    do_start_recording(&app, &state, mic_device_name, existing_id)
 }
 
 #[tauri::command]
@@ -658,7 +691,7 @@ pub fn run() {
                     }
                     "start" => {
                         let state = app.state::<AppState>();
-                        if let Err(e) = do_start_recording(app, &state, None) {
+                        if let Err(e) = do_start_recording(app, &state, None, None) {
                             eprintln!("Failed to start recording from tray: {}", e);
                             let _ = app.notification().builder()
                                 .title("Error")
@@ -732,7 +765,7 @@ pub fn run() {
                                     println!("Stopped recording via shortcut");
                                 }
                             } else {
-                                if let Err(e) = do_start_recording(app, &state, None) {
+                                if let Err(e) = do_start_recording(app, &state, None, None) {
                                     eprintln!("Failed to start recording via shortcut: {}", e);
                                 } else {
                                     println!("Started recording via shortcut");
