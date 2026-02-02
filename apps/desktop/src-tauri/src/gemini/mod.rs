@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+// use base64::{engine::general_purpose::STANDARD, Engine as _}; // Removed unused
 use serde_json::json;
 
 pub fn template_text(template_id: &str) -> Result<&'static str, String> {
@@ -44,17 +44,89 @@ pub async fn summarize_audio_to_markdown(
     prompt_text: &str,
     previous_summary: Option<&str>,
 ) -> Result<String, String> {
-    // Gemini Generative Language API: send audio as inlineData.
-    let audio_b64 = STANDARD.encode(audio_bytes);
+    let client = reqwest::Client::new();
 
+    // 1. Upload file using Gemini File API
+    // https://ai.google.dev/gemini-api/docs/audio?lang=python#upload_and_process_audio
+    println!("[AI] Uploading audio to File API ({} bytes)...", audio_bytes.len());
+    
+    let upload_url = format!(
+        "https://generativelanguage.googleapis.com/upload/v1beta/files?key={}",
+        api_key
+    );
+
+    // Initial metadata request to get the upload URL
+    let metadata = json!({
+        "file": {
+            "display_name": "meeting_part",
+            "mime_type": audio_mime,
+        }
+    });
+
+    let resp = client
+        .post(&upload_url)
+        .header("X-Goog-Upload-Protocol", "multipart")
+        .header("X-Goog-Upload-Command", "upload, finalize")
+        .header("X-Goog-Upload-Header-Content-Length", audio_bytes.len().to_string())
+        .header("X-Goog-Upload-Header-Content-Type", audio_mime)
+        .multipart(reqwest::multipart::Form::new()
+            .part("metadata", reqwest::multipart::Part::text(metadata.to_string()).mime_str("application/json").unwrap())
+            .part("file", reqwest::multipart::Part::bytes(audio_bytes).mime_str(audio_mime).unwrap())
+        )
+        .send()
+        .await
+        .map_err(|e| format!("Failed to upload audio to Gemini File API: {e}"))?;
+
+    if !resp.status().is_success() {
+        let err_text = resp.text().await.unwrap_or_default();
+        return Err(format!("Gemini File API upload error: {}", err_text));
+    }
+
+    let upload_res: serde_json::Value = resp.json().await.map_err(|e| format!("Invalid upload response: {e}"))?;
+    let file_uri = upload_res["file"]["uri"].as_str().ok_or("Missing file URI")?.to_string();
+    let file_name = upload_res["file"]["name"].as_str().ok_or("Missing file name")?.to_string();
+
+    // 2. Poll for file status (Wait until it's ACTIVE)
+    println!("[AI] Waiting for file to be processed (id: {})...", file_name);
+    let get_file_url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
+        file_name, api_key
+    );
+
+    let mut attempts = 0;
+    loop {
+        attempts += 1;
+        if attempts > 30 {
+            return Err("Timeout waiting for audio file processing".to_string());
+        }
+
+        let poll_resp = client.get(&get_file_url).send().await.map_err(|e| format!("Poll failed: {e}"))?;
+        let poll_json: serde_json::Value = poll_resp.json().await.map_err(|e| format!("Invalid poll JSON: {e}"))?;
+        
+        let state = poll_json["state"].as_str().unwrap_or("PROCESSING");
+        if state == "ACTIVE" {
+            break;
+        } else if state == "FAILED" {
+            return Err("Gemini reported file processing failure".to_string());
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+
+    // 3. Generate content using the file URI
     let final_prompt = if let Some(prev) = previous_summary {
         format!(
-            "Below is the current summary of the previous parts of the meeting:\n\n---\n{}\n---\n\nUsing the instructions from the original prompt below, update and supplement this summary based on the new audio part provided.\n\nOriginal Prompt:\n{}",
+            "CONTEXT: Below is the current version of the summary from the previous parts of this meeting.\n\n---\n{}\n---\n\nTASK: Update and expand this summary based on the new audio part provided. \n\nRULES:\n1. Keep all existing important information from the CONTEXT above.\n2. Supplement it with new insights from the provided audio.\n3. Return the COMPLETE updated Markdown document.\n4. DO NOT truncate or cut off the text mid-sentence.\n5. If the document is reaching a very large size, prioritize merging related points rather than removing details.\n\nFollow the original structure requirements:\n{}",
             prev, prompt_text
         )
     } else {
         prompt_text.to_string()
     };
+
+    let generate_url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
+        api_key
+    );
 
     let body = json!({
       "contents": [
@@ -62,52 +134,47 @@ pub async fn summarize_audio_to_markdown(
           "role": "user",
           "parts": [
             {"text": &final_prompt},
-            {"text": "\n\nNow process the provided audio and return the updated Markdown note. Return ONLY the Markdown without any extra text."},
-            {"inlineData": {"mimeType": audio_mime, "data": audio_b64}}
+            {"text": "\n\nProcess the audio and return the full updated Markdown note. Return ONLY Markdown content. Ensure the response is complete and not truncated."},
+            {"fileData": {"mimeType": audio_mime, "fileUri": file_uri}}
           ]
         }
       ],
       "generationConfig": {
-        "temperature": 0.2,
-        "maxOutputTokens": 4096
+        "temperature": 0.1,
+        "maxOutputTokens": 8192,
+        "topP": 0.95
       }
     });
 
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
-        api_key
-    );
-
-    let client = reqwest::Client::new();
     let resp = client
-        .post(url)
+        .post(&generate_url)
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Gemini request failed: {e}"))?;
+        .map_err(|e| format!("Gemini generateContent request failed: {e}"))?;
 
-    let status = resp.status();
-    let raw = resp
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read Gemini response: {e}"))?;
+    let raw = resp.text().await.map_err(|e| format!("Failed to read generateContent response: {e}"))?;
+    let v: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("Invalid generateContent JSON: {e}"))?;
 
-    if !status.is_success() {
-        return Err(format!("Gemini API error ({status}): {raw}"));
+    let candidate = v.get("candidates")
+        .and_then(|c| c.get(0))
+        .ok_or_else(|| format!("Gemini response missing candidates. Full response: {}", raw))?;
+
+    let finish_reason = candidate.get("finishReason").and_then(|f| f.as_str()).unwrap_or("UNKNOWN");
+    if finish_reason == "MAX_TOKENS" {
+        println!("[AI] WARNING: Response was truncated due to MAX_TOKENS limit (8192).");
     }
 
-    let v: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|e| format!("Invalid Gemini JSON response: {e}"))?;
-
-    let text = v
-        .get("candidates")
-        .and_then(|c| c.get(0))
-        .and_then(|c0| c0.get("content"))
+    let text = candidate
+        .get("content")
         .and_then(|ct| ct.get("parts"))
         .and_then(|p| p.get(0))
         .and_then(|p0| p0.get("text"))
         .and_then(|t| t.as_str())
-        .ok_or_else(|| "Gemini response missing candidates[0].content.parts[0].text".to_string())?;
+        .ok_or_else(|| format!("Gemini response missing text. Reason: {}. Response: {}", finish_reason, raw))?;
 
-    Ok(text.trim().to_string())
+    let trimmed = text.trim();
+    println!("[AI] Received response ({} characters, finish_reason: {})", trimmed.len(), finish_reason);
+
+    Ok(trimmed.to_string())
 }
