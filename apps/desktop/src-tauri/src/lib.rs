@@ -376,7 +376,7 @@ async fn summarize_recording(
             .ok_or_else(|| format!("Prompt with id {} not found", prompt_id))?
     };
 
-    let mut current_markdown: Option<String> = None;
+    let mut all_results = Vec::new();
 
     for (i, part) in parts.iter().enumerate() {
         println!("[AI] Processing part {}/{} (id: {})", i + 1, parts.len(), part.id);
@@ -390,13 +390,17 @@ async fn summarize_recording(
             audio_bytes, 
             &audio_mime, 
             &prompt_text, 
-            current_markdown.as_deref()
         ).await?;
 
-        current_markdown = Some(result);
+        // Add a part header if there are multiple parts
+        if parts.len() > 1 {
+            let part_header = format!("\n\n---\n## Part {}\n", i + 1);
+            all_results.push(part_header);
+        }
+        all_results.push(result);
     }
 
-    let markdown = current_markdown.ok_or("Failed to generate markdown")?;
+    let markdown = all_results.join("");
 
     let (id_to_use, md_rel) = if let Some(nid) = note_id {
         // Regeneration

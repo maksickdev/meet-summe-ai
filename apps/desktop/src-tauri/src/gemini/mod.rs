@@ -42,12 +42,10 @@ pub async fn summarize_audio_to_markdown(
     audio_bytes: Vec<u8>,
     audio_mime: &str,
     prompt_text: &str,
-    previous_summary: Option<&str>,
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
 
     // 1. Upload file using Gemini File API
-    // https://ai.google.dev/gemini-api/docs/audio?lang=python#upload_and_process_audio
     println!("[AI] Uploading audio to File API ({} bytes)...", audio_bytes.len());
     
     let upload_url = format!(
@@ -55,7 +53,6 @@ pub async fn summarize_audio_to_markdown(
         api_key
     );
 
-    // Initial metadata request to get the upload URL
     let metadata = json!({
         "file": {
             "display_name": "meeting_part",
@@ -86,7 +83,7 @@ pub async fn summarize_audio_to_markdown(
     let file_uri = upload_res["file"]["uri"].as_str().ok_or("Missing file URI")?.to_string();
     let file_name = upload_res["file"]["name"].as_str().ok_or("Missing file name")?.to_string();
 
-    // 2. Poll for file status (Wait until it's ACTIVE)
+    // 2. Poll for file status 
     println!("[AI] Waiting for file to be processed (id: {})...", file_name);
     let get_file_url = format!(
         "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
@@ -113,16 +110,7 @@ pub async fn summarize_audio_to_markdown(
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
 
-    // 3. Generate content using the file URI
-    let final_prompt = if let Some(prev) = previous_summary {
-        format!(
-            "CONTEXT: Below is the current version of the summary from the previous parts of this meeting.\n\n---\n{}\n---\n\nTASK: Update and expand this summary based on the new audio part provided. \n\nRULES:\n1. Keep all existing important information from the CONTEXT above.\n2. Supplement it with new insights from the provided audio.\n3. Return the COMPLETE updated Markdown document.\n4. DO NOT truncate or cut off the text mid-sentence.\n5. If the document is reaching a very large size, prioritize merging related points rather than removing details.\n\nFollow the original structure requirements:\n{}",
-            prev, prompt_text
-        )
-    } else {
-        prompt_text.to_string()
-    };
-
+    // 3. Generate content
     let generate_url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
         api_key
@@ -133,15 +121,14 @@ pub async fn summarize_audio_to_markdown(
         {
           "role": "user",
           "parts": [
-            {"text": &final_prompt},
-            {"text": "\n\nProcess the audio and return the full updated Markdown note. Return ONLY Markdown content. Ensure the response is complete and not truncated."},
+            {"text": prompt_text},
+            {"text": "\n\nProcess the audio and return the Markdown note. Return ONLY Markdown content. Ensure the response is complete and not truncated."},
             {"fileData": {"mimeType": audio_mime, "fileUri": file_uri}}
           ]
         }
       ],
       "generationConfig": {
         "temperature": 0.1,
-        "maxOutputTokens": 8192,
         "topP": 0.95
       }
     });
