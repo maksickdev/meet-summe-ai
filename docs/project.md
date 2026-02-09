@@ -227,6 +227,7 @@ Each template should define:
   - show progress states (upload → processing → done)
   - cache last successful markdown output per recording
   - allow re-run with a different template
+  - emit granular progress events to the UI (uploading, processing, generating, writing) with part index/total for multi-segment sessions
 
 ## Security & privacy
 

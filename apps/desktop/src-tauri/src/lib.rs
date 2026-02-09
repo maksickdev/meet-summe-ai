@@ -9,6 +9,7 @@ mod gemini;
 mod storage;
 
 use parking_lot::Mutex;
+use serde::Serialize;
 use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
 use std::thread;
 use std::time::Duration;
@@ -24,6 +25,15 @@ use tauri_plugin_notification::NotificationExt;
 struct ActiveRecording {
     session: audio::recorder::RecordingSession,
     meta: storage::RecordingMetadata,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SummarizeStatusPayload {
+    stage: String,
+    message: String,
+    part_index: Option<usize>,
+    part_total: Option<usize>,
 }
 
 #[derive(Default)]
@@ -77,6 +87,25 @@ fn update_tray_menu(app: &tauri::AppHandle, is_recording: bool) {
         if let Some(tray) = state.tray_icon.lock().as_ref() {
              let _ = tray.set_title(Some(""));
         }
+    }
+}
+
+fn emit_summarize_status(
+    app: &tauri::AppHandle,
+    stage: &str,
+    message: &str,
+    part_index: Option<usize>,
+    part_total: Option<usize>,
+) {
+    let payload = SummarizeStatusPayload {
+        stage: stage.to_string(),
+        message: message.to_string(),
+        part_index,
+        part_total,
+    };
+
+    if let Err(e) = app.emit("summarize-status", &payload) {
+        eprintln!("Failed to emit summarize-status event: {}", e);
     }
 }
 
@@ -376,20 +405,35 @@ async fn summarize_recording(
             .ok_or_else(|| format!("Prompt with id {} not found", prompt_id))?
     };
 
+    emit_summarize_status(&app, "starting", "Starting summarization", None, None);
     let mut all_results = Vec::new();
 
     for (i, part) in parts.iter().enumerate() {
+        let part_index = i + 1;
+        let part_total = parts.len();
         println!("[AI] Processing part {}/{} (id: {})", i + 1, parts.len(), part.id);
+        emit_summarize_status(
+            &app,
+            "part_start",
+            "Preparing audio part",
+            Some(part_index),
+            Some(part_total),
+        );
         
         let audio_path = storage::abs_path(&app, &part.mic.relative_path)?;
         let audio_mime = gemini::guess_audio_mime_type(&audio_path);
         let audio_bytes = std::fs::read(&audio_path).map_err(|e| format!("Failed to read audio file: {e}"))?;
+
+        let status_cb = |stage: &str, message: &str| {
+            emit_summarize_status(&app, stage, message, Some(part_index), Some(part_total));
+        };
 
         let result = gemini::summarize_audio_to_markdown(
             &api_key, 
             audio_bytes, 
             &audio_mime, 
             &prompt_text, 
+            &status_cb,
         ).await?;
 
         // Add a part header if there are multiple parts
@@ -415,6 +459,7 @@ async fn summarize_recording(
         (nid, rel)
     };
 
+    emit_summarize_status(&app, "writing", "Writing Markdown file", None, None);
     let md_path = storage::abs_path(&app, &md_rel)?;
     if let Some(parent) = md_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create output dir: {e}"))?;
@@ -441,6 +486,7 @@ async fn summarize_recording(
 
     meta.markdown_relative_path = Some(md_rel);
     storage::save_recording_metadata(&app, &meta)?;
+    emit_summarize_status(&app, "done", "Summarization complete", None, None);
     Ok(meta)
 }
 

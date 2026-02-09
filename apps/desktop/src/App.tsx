@@ -50,6 +50,22 @@ function joinPaths(base: string, relative: string): string {
   return `${b}/${r}`;
 }
 
+type SummarizeStatusPayload = {
+  stage: string;
+  message: string;
+  partIndex?: number;
+  partTotal?: number;
+};
+
+function formatSummarizeStatus(payload: SummarizeStatusPayload): string {
+  const hasPart =
+    typeof payload.partIndex === "number" && typeof payload.partTotal === "number";
+  if (hasPart) {
+    return `Part ${payload.partIndex}/${payload.partTotal}: ${payload.message}`;
+  }
+  return payload.message;
+}
+
 export default function App() {
   // --- State ---
   const [storageDir, setStorageDirState] = useState<string>("");
@@ -173,6 +189,9 @@ export default function App() {
           setStartTime(null);
           setAccumulatedDuration(0);
         });
+      }),
+      listen<SummarizeStatusPayload>("summarize-status", (event) => {
+        setStatus(formatSummarizeStatus(event.payload));
       }),
     ]).then((unlisteners) => {
       if (unmounted) {
@@ -400,7 +419,7 @@ export default function App() {
 
     setIsSummarizing(true);
     try {
-      setStatus("Summarizing with Gemini...");
+      setStatus("Starting summarization...");
       const updated = await summarizeRecording(selected.id, promptId, noteId);
       await refreshRecordings();
       setSelectedId(updated.id);

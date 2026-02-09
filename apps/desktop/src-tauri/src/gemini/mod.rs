@@ -42,10 +42,12 @@ pub async fn summarize_audio_to_markdown(
     audio_bytes: Vec<u8>,
     audio_mime: &str,
     prompt_text: &str,
+    status_cb: &(dyn Fn(&str, &str) + Send + Sync),
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
 
     // 1. Upload file using Gemini File API
+    status_cb("uploading", "Uploading audio");
     println!("[AI] Uploading audio to File API ({} bytes)...", audio_bytes.len());
     
     let upload_url = format!(
@@ -84,6 +86,7 @@ pub async fn summarize_audio_to_markdown(
     let file_name = upload_res["file"]["name"].as_str().ok_or("Missing file name")?.to_string();
 
     // 2. Poll for file status 
+    status_cb("processing", "Processing uploaded audio");
     println!("[AI] Waiting for file to be processed (id: {})...", file_name);
     let get_file_url = format!(
         "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
@@ -111,6 +114,7 @@ pub async fn summarize_audio_to_markdown(
     }
 
     // 3. Generate content
+    status_cb("generating", "Generating summary");
     let generate_url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
         api_key

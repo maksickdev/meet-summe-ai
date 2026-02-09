@@ -1,3 +1,10 @@
+## [2026-02-09] - Summarization Progress Events
+### Added
+- **Detailed Summarization Status**: Status bar now shows granular steps (uploading, processing, generating, writing) with per-part context for multi-segment recordings.
+
+### Changed
+- **Gemini Pipeline**: Backend emits `summarize-status` events during each processing stage to drive UI updates.
+
 ## [2026-02-01] - Multi-segment Sessions & Incremental AI
 ### Added
 - **Multi-segment Support**: A single recording can now consist of multiple audio parts (sessions), allowing users to pause for long periods or record different phases of a meeting under one project.
