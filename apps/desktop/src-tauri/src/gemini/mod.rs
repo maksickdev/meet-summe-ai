@@ -48,7 +48,7 @@ pub async fn summarize_audio_to_markdown(
 
     // 1. Upload file using Gemini File API
     status_cb("uploading", "Uploading audio");
-    println!("[AI] Uploading audio to File API ({} bytes)...", audio_bytes.len());
+    log::info!("[AI] Uploading audio to File API ({} bytes)...", audio_bytes.len());
     
     let upload_url = format!(
         "https://generativelanguage.googleapis.com/upload/v1beta/files?key={}",
@@ -87,7 +87,7 @@ pub async fn summarize_audio_to_markdown(
 
     // 2. Poll for file status 
     status_cb("processing", "Processing uploaded audio");
-    println!("[AI] Waiting for file to be processed (id: {})...", file_name);
+    log::info!("[AI] Waiting for file to be processed (id: {})...", file_name);
     let get_file_url = format!(
         "https://generativelanguage.googleapis.com/v1beta/{}?key={}",
         file_name, api_key
@@ -153,7 +153,7 @@ pub async fn summarize_audio_to_markdown(
 
     let finish_reason = candidate.get("finishReason").and_then(|f| f.as_str()).unwrap_or("UNKNOWN");
     if finish_reason == "MAX_TOKENS" {
-        println!("[AI] WARNING: Response was truncated due to MAX_TOKENS limit (8192).");
+        log::warn!("[AI] WARNING: Response was truncated due to MAX_TOKENS limit (8192).");
     }
 
     let text = candidate
@@ -165,7 +165,11 @@ pub async fn summarize_audio_to_markdown(
         .ok_or_else(|| format!("Gemini response missing text. Reason: {}. Response: {}", finish_reason, raw))?;
 
     let trimmed = text.trim();
-    println!("[AI] Received response ({} characters, finish_reason: {})", trimmed.len(), finish_reason);
+    log::info!(
+        "[AI] Received response ({} characters, finish_reason: {})",
+        trimmed.len(),
+        finish_reason
+    );
 
     Ok(trimmed.to_string())
 }

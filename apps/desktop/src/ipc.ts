@@ -148,3 +148,7 @@ export async function setRecordingHotkey(hotkey: string): Promise<void> {
 export async function setShortcutsDisabled(disabled: boolean): Promise<void> {
   await invoke<void>("set_shortcuts_disabled", { disabled });
 }
+
+export async function showLogFileInFolder(): Promise<void> {
+  await invoke<void>("show_log_file_in_folder");
+}

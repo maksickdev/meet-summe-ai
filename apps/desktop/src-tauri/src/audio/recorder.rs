@@ -244,7 +244,7 @@ fn system_capture_loop(
             if guard.is_none() {
                 // qruhear default assumption
                 *guard = Some(48000); 
-                eprintln!("[System Audio] Assuming source rate 48000 Hz");
+                log::info!("[System Audio] Assuming source rate 48000 Hz");
             }
             source_rate = guard.unwrap_or(48000);
         }
@@ -275,13 +275,13 @@ fn system_capture_loop(
         .start()
         .map_err(|e| format!("Failed to start system audio capture: {e}"))?;
 
-    eprintln!("[System Audio] Capture thread started");
+    log::info!("[System Audio] Capture thread started");
 
     while !stop.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(50));
     }
     
-    eprintln!("[System Audio] Stopping capture");
+    log::info!("[System Audio] Stopping capture");
     ruhear
         .stop()
         .map_err(|e| format!("Failed to stop system audio capture: {e}"))?;
@@ -307,13 +307,13 @@ fn mic_capture_loop(
     let stream_sample_rate = config.sample_rate.0;
     let channels = config.channels as usize;
     
-    eprintln!(
+    log::info!(
         "[Microphone] Starting capture: {}Hz (target {}), {} channels, format: {:?}",
         stream_sample_rate, target_sample_rate, channels, sample_format
     );
 
     let prod = Arc::new(Mutex::new(prod_mic));
-    let err_fn = |err| eprintln!("[Microphone] cpal input stream error: {err}");
+    let err_fn = |err| log::error!("[Microphone] cpal input stream error: {err}");
 
     let stop_f32 = Arc::clone(&stop);
     let paused_f32 = Arc::clone(&paused);
@@ -371,13 +371,13 @@ fn mic_capture_loop(
         .play()
         .map_err(|e| format!("Failed to start input stream: {e}"))?;
 
-    eprintln!("[Microphone] Capture stream started");
+    log::info!("[Microphone] Capture stream started");
 
     while !stop.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(50));
     }
     
-    eprintln!("[Microphone] Stopping capture");
+    log::info!("[Microphone] Stopping capture");
     drop(stream);
     Ok(())
 }
@@ -470,12 +470,12 @@ fn writer_loop(
         None
     };
 
-    eprintln!("[Writer] Mic path: {}", mic_path.display());
+    log::info!("[Writer] Mic path: {}", mic_path.display());
     if let Some(p) = &sys_path {
-        eprintln!("[Writer] System path: {}", p.display());
+        log::info!("[Writer] System path: {}", p.display());
     }
     if let Some(p) = &merged_path {
-        eprintln!("[Writer] Merged path: {}", p.display());
+        log::info!("[Writer] Merged path: {}", p.display());
     }
 
     let mut total_frames = 0u64;
@@ -539,10 +539,10 @@ fn writer_loop(
             // - Process render (system) frame as reference
             // - Process capture (mic) frame to remove echo
             if let Err(e) = processor.process_render_frame(&mut render_frame) {
-                eprintln!("[Writer] AEC render error: {:?}", e);
+                log::warn!("[Writer] AEC render error: {:?}", e);
             }
             if let Err(e) = processor.process_capture_frame(&mut capture_frame) {
-                eprintln!("[Writer] AEC capture error: {:?}", e);
+                log::warn!("[Writer] AEC capture error: {:?}", e);
             }
 
             // 3. Write frames with gains
@@ -582,7 +582,7 @@ fn writer_loop(
         }
     }
 
-    eprintln!(
+    log::info!(
         "[Writer] Finished: {} total frames written",
         total_frames
     );

@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Settings, FolderOpen, Mic, Key, Keyboard, Sparkles, Plus, Trash2, Edit2, Check, X } from "lucide-react";
+import { Settings, FolderOpen, Mic, Key, Keyboard, Sparkles, Plus, Trash2, Edit2, Check, X, FileText } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -22,6 +22,7 @@ interface SettingsDialogProps {
   storageDirDraft: string;
   onStorageDirDraftChange: (val: string) => void;
   onSaveStorage: () => void;
+  onShowLogFile: () => void;
 
   micDevice: string;
   devices: string[];
@@ -57,6 +58,7 @@ export function SettingsDialog({
   storageDirDraft,
   onStorageDirDraftChange,
   onSaveStorage,
+  onShowLogFile,
   micDevice,
   devices,
   onChangeMic,
@@ -140,6 +142,10 @@ export function SettingsDialog({
               />
               <Button onClick={onSaveStorage}>Save</Button>
             </div>
+            <Button variant="outline" className="w-full gap-2" onClick={onShowLogFile}>
+              <FileText className="w-4 h-4" />
+              Show Log File in Finder/Explorer
+            </Button>
           </div>
 
           <Separator />

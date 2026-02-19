@@ -10,7 +10,12 @@ mod storage;
 
 use parking_lot::Mutex;
 use serde::Serialize;
-use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
+use std::fs::{self, OpenOptions};
+use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, OnceLock,
+};
 use std::thread;
 use std::time::Duration;
 use tauri::{
@@ -21,6 +26,8 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
+
+static LOG_FILE_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 struct ActiveRecording {
     session: audio::recorder::RecordingSession,
@@ -47,13 +54,71 @@ struct AppState {
     shortcuts_disabled: AtomicBool,
 }
 
+fn resolve_log_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if let Some(path) = LOG_FILE_PATH.get() {
+        return Ok(path.clone());
+    }
+
+    let log_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir for logs: {e}"))?
+        .join("logs");
+    fs::create_dir_all(&log_dir)
+        .map_err(|e| format!("Failed to create log directory '{}': {e}", log_dir.display()))?;
+
+    let log_file = log_dir.join("summerizer.log");
+    if LOG_FILE_PATH.set(log_file.clone()).is_err() {
+        if let Some(path) = LOG_FILE_PATH.get() {
+            return Ok(path.clone());
+        }
+    }
+    Ok(log_file)
+}
+
+fn init_logging(app: &tauri::AppHandle) -> Result<(), String> {
+    let log_file = resolve_log_file_path(app)?;
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file)
+        .map_err(|e| format!("Failed to open log file '{}': {e}", log_file.display()))?;
+
+    let dispatch = fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{} [{}] {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stdout())
+        .chain(
+            fern::log_file(&log_file)
+                .map_err(|e| format!("Failed to bind log file '{}': {e}", log_file.display()))?,
+        );
+
+    dispatch
+        .apply()
+        .map_err(|e| format!("Failed to initialize logger: {e}"))?;
+
+    std::panic::set_hook(Box::new(|panic_info| {
+        log::error!("Panic: {}", panic_info);
+    }));
+
+    log::info!("Logger initialized: {}", log_file.display());
+    Ok(())
+}
+
 fn register_hotkey(app: &tauri::AppHandle, hotkey_str: &str) -> Result<(), String> {
     use std::str::FromStr;
     let state = app.state::<AppState>();
     let shortcut = Shortcut::from_str(hotkey_str)
         .map_err(|e| format!("Invalid shortcut format '{}': {}", hotkey_str, e))?;
 
-    println!("[Hotkey] Attempting to register: {}", hotkey_str);
+    log::info!("[Hotkey] Attempting to register: {}", hotkey_str);
 
     // Unregister everything to be sure we only have one recording hotkey
     let _ = app.global_shortcut().unregister_all();
@@ -68,7 +133,7 @@ fn register_hotkey(app: &tauri::AppHandle, hotkey_str: &str) -> Result<(), Strin
     *state.current_shortcut.lock() = Some(shortcut);
     *state.current_shortcut_str.lock() = normalized.clone();
     
-    println!("[Hotkey] Successfully registered: {}", normalized);
+    log::info!("[Hotkey] Successfully registered: {}", normalized);
     Ok(())
 }
 
@@ -105,7 +170,7 @@ fn emit_summarize_status(
     };
 
     if let Err(e) = app.emit("summarize-status", &payload) {
-        eprintln!("Failed to emit summarize-status event: {}", e);
+        log::error!("Failed to emit summarize-status event: {}", e);
     }
 }
 
@@ -175,7 +240,7 @@ fn do_start_recording(
         .show();
 
     if let Err(e) = app.emit("recording-started", &meta) {
-        eprintln!("Failed to emit recording-started event: {}", e);
+        log::error!("Failed to emit recording-started event: {}", e);
     }
 
     // Spawn tray timer thread
@@ -196,7 +261,7 @@ fn do_start_recording(
              
              // Check again to avoid race with stop_recording
              if !is_recording.load(Ordering::SeqCst) {
-                 println!("[Tray] Loop explicitly breaking");
+                 log::info!("[Tray] Loop explicitly breaking");
                  break;
              }
 
@@ -207,12 +272,12 @@ fn do_start_recording(
              thread::sleep(Duration::from_millis(1000));
         }
         
-        println!("[Tray] Timer thread exiting");
+        log::info!("[Tray] Timer thread exiting");
         // Ensure title is cleared when thread exits
         let state = app_handle.state::<AppState>();
         let guard = state.tray_icon.lock();
         if let Some(tray) = guard.as_ref() {
-             println!("[Tray] Clearing title");
+             log::info!("[Tray] Clearing title");
              let _ = tray.set_title(Some(""));
         }
     });
@@ -306,7 +371,7 @@ fn do_stop_recording(
         .show();
 
     if let Err(e) = app.emit("recording-stopped", &meta) {
-        eprintln!("Failed to emit recording-stopped event: {}", e);
+        log::error!("Failed to emit recording-stopped event: {}", e);
     }
 
     Ok(meta)
@@ -411,7 +476,7 @@ async fn summarize_recording(
     for (i, part) in parts.iter().enumerate() {
         let part_index = i + 1;
         let part_total = parts.len();
-        println!("[AI] Processing part {}/{} (id: {})", i + 1, parts.len(), part.id);
+        log::info!("[AI] Processing part {}/{} (id: {})", i + 1, parts.len(), part.id);
         emit_summarize_status(
             &app,
             "part_start",
@@ -526,6 +591,12 @@ fn show_in_folder(path: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[tauri::command]
+fn show_log_file_in_folder(app: tauri::AppHandle) -> Result<(), String> {
+    let log_file = resolve_log_file_path(&app)?;
+    show_in_folder(log_file.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -710,6 +781,8 @@ pub fn run() {
             _ => {}
         })
         .setup(|app| {
+            init_logging(app.handle()).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+
             let show_i = MenuItem::with_id(app, "show", "Show summe", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let start_i = MenuItem::with_id(app, "start", "Start Recording", true, None::<&str>)?;
@@ -742,25 +815,25 @@ pub fn run() {
                     "start" => {
                         let state = app.state::<AppState>();
                         if let Err(e) = do_start_recording(app, &state, None, None) {
-                            eprintln!("Failed to start recording from tray: {}", e);
+                            log::error!("Failed to start recording from tray: {}", e);
                             let _ = app.notification().builder()
                                 .title("Error")
                                 .body(&format!("Failed to start recording: {}", e))
                                 .show();
                         } else {
-                            println!("Started recording from tray");
+                            log::info!("Started recording from tray");
                         }
                     }
                     "stop" => {
                         let state = app.state::<AppState>();
                         if let Err(e) = do_stop_recording(app, &state) {
-                            eprintln!("Failed to stop recording from tray: {}", e);
+                            log::error!("Failed to stop recording from tray: {}", e);
                             let _ = app.notification().builder()
                                 .title("Error")
                                 .body(&format!("Failed to stop recording: {}", e))
                                 .show();
                         } else {
-                            println!("Stopped recording from tray");
+                            log::info!("Stopped recording from tray");
                         }
                     }
                     _ => {}
@@ -810,15 +883,15 @@ pub fn run() {
                             let is_recording = state.recording.lock().is_some();
                             if is_recording {
                                 if let Err(e) = do_stop_recording(app, &state) {
-                                    eprintln!("Failed to stop recording via shortcut: {}", e);
+                                    log::error!("Failed to stop recording via shortcut: {}", e);
                                 } else {
-                                    println!("Stopped recording via shortcut");
+                                    log::info!("Stopped recording via shortcut");
                                 }
                             } else {
                                 if let Err(e) = do_start_recording(app, &state, None, None) {
-                                    eprintln!("Failed to start recording via shortcut: {}", e);
+                                    log::error!("Failed to start recording via shortcut: {}", e);
                                 } else {
-                                    println!("Started recording via shortcut");
+                                    log::info!("Started recording via shortcut");
                                 }
                             }
                         }
@@ -829,7 +902,7 @@ pub fn run() {
             
             let hotkey = storage::get_recording_hotkey(app.handle())?;
             if let Err(e) = register_hotkey(app.handle(), &hotkey) {
-                eprintln!("Failed to register initial shortcut: {}", e);
+                log::error!("Failed to register initial shortcut: {}", e);
             }
 
             Ok(())
@@ -849,6 +922,7 @@ pub fn run() {
             delete_recording,
             rename_recording,
             show_in_folder,
+            show_log_file_in_folder,
             list_input_devices,
             start_recording,
             pause_recording,
@@ -874,4 +948,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-

@@ -39,4 +39,5 @@ base64 = "0.22"
 rubato = "0.16"
 tauri-plugin-notification = "2.3.3"
 webrtc-audio-processing = { version = "0.5.0", features = ["bundled"] }
-
+log = "0.4"
+fern = "0.7"

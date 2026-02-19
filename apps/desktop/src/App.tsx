@@ -31,6 +31,7 @@ import {
   updateCustomPrompt,
   deleteCustomPrompt,
   deleteRecordingNote,
+  showLogFileInFolder,
 } from "./ipc";
 
 import type { RecordingMetadata, CustomPrompt } from "./types/recording";
@@ -373,6 +374,16 @@ export default function App() {
     }
   }
 
+  async function onShowLogFile() {
+    try {
+      await showLogFileInFolder();
+      setStatus("Log file opened in Finder/Explorer.");
+    } catch (e) {
+      console.error(e);
+      setStatus(`Log open error: ${String(e)}`);
+    }
+  }
+
   async function onDelete(id: string) {
     setRecordingToDelete(id);
     setDeleteConfirmOpen(true);
@@ -542,6 +553,7 @@ export default function App() {
         storageDirDraft={storageDirDraft}
         onStorageDirDraftChange={setStorageDirDraft}
         onSaveStorage={onSaveStorage}
+        onShowLogFile={onShowLogFile}
 
         micDevice={micDevice}
         devices={devices}
