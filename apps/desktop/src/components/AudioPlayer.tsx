@@ -10,7 +10,6 @@ export type AudioPlayerProps = {
 const BAR_WIDTH = 3;
 const BAR_GAP = 2;
 const MIN_BAR_COUNT = 12;
-const MAX_BAR_COUNT = 240;
 const WAVEFORM_ANALYSIS_BARS = 512;
 
 export function AudioPlayer({ absolutePath }: AudioPlayerProps) {
@@ -108,10 +107,7 @@ export function AudioPlayer({ absolutePath }: AudioPlayerProps) {
     const innerWidth = Math.max(0, waveformWidth - horizontalPadding);
     const targetCount = Math.max(
       MIN_BAR_COUNT,
-      Math.min(
-        MAX_BAR_COUNT,
-        Math.floor((innerWidth + BAR_GAP) / segmentWidth),
-      ),
+      Math.floor((innerWidth + BAR_GAP) / segmentWidth),
     );
 
     if (!sourcePeaks.length) {
@@ -266,10 +262,6 @@ export function AudioPlayer({ absolutePath }: AudioPlayerProps) {
               );
             })}
           </div>
-        </div>
-        <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
-          <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(duration)}</span>
         </div>
       </div>
 
