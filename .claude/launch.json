@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Vite Dev Server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "apps/desktop",
+      "port": 1420
+    },
+    {
+      "name": "Tauri Dev (full app)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "tauri", "dev"],
+      "cwd": "apps/desktop",
+      "port": 1420
+    }
+  ]
+}

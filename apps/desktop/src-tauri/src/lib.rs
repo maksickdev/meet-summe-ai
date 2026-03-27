@@ -294,25 +294,30 @@ fn do_stop_recording(
         .take()
         .ok_or_else(|| "No active recording.".to_string())?;
 
-    let result = active.session.stop()?;
+    let stop_result = active.session.stop();
+    if let Err(ref e) = stop_result {
+        log::error!("[StopRecording] Session stop returned an error: {}. Proceeding with state cleanup.", e);
+    }
 
     let mut meta = active.meta;
     // Update the last part (which is the one we just recorded)
     if let Some(part) = meta.audio_parts.last_mut() {
-        part.mic.duration_ms = Some(result.duration_ms);
-        part.mic.sample_rate = result.sample_rate;
-        part.mic.channels = result.channels;
+        if let Ok(ref result) = stop_result {
+            part.mic.duration_ms = Some(result.duration_ms);
+            part.mic.sample_rate = result.sample_rate;
+            part.mic.channels = result.channels;
 
-        if let Some(sys) = &mut part.system {
-            sys.duration_ms = Some(result.duration_ms);
-            sys.sample_rate = result.sample_rate;
-            sys.channels = result.channels;
-        }
+            if let Some(sys) = &mut part.system {
+                sys.duration_ms = Some(result.duration_ms);
+                sys.sample_rate = result.sample_rate;
+                sys.channels = result.channels;
+            }
 
-        if let Some(merged) = &mut part.merged {
-            merged.duration_ms = Some(result.duration_ms);
-            merged.sample_rate = result.sample_rate;
-            merged.channels = result.channels;
+            if let Some(merged) = &mut part.merged {
+                merged.duration_ms = Some(result.duration_ms);
+                merged.sample_rate = result.sample_rate;
+                merged.channels = result.channels;
+            }
         }
 
         // Handle recording mode: if "merged", delete extra files and keep only the merged one as the main audio.
@@ -358,23 +363,28 @@ fn do_stop_recording(
     }
 
     storage::save_recording_metadata(app, &meta)?;
-    
-    // Update state and UI
+
+    // Always reset app state and notify the UI, even if the session stop had an error.
     state.is_recording.store(false, Ordering::SeqCst);
     update_tray_menu(app, false);
 
-    // Send notification
+    let notification_body = if stop_result.is_ok() {
+        "Your recording has been saved successfully."
+    } else {
+        "Recording stopped with an error. The file may be incomplete."
+    };
     let _ = app.notification()
         .builder()
         .title("Recording Saved")
-        .body("Your recording has been saved successfully.")
+        .body(notification_body)
         .show();
 
     if let Err(e) = app.emit("recording-stopped", &meta) {
         log::error!("Failed to emit recording-stopped event: {}", e);
     }
 
-    Ok(meta)
+    // Surface the session stop error after cleanup is complete.
+    stop_result.map(|_| meta)
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/

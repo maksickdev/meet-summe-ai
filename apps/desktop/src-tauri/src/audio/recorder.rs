@@ -158,11 +158,25 @@ impl RecordingSession {
 
     pub fn stop(mut self) -> Result<RecordingResult, String> {
         self.stop.store(true, Ordering::SeqCst);
+        // Join all threads before returning, even if one of them errors.
+        // Returning early would leave threads running and the app state inconsistent.
+        let mut first_err: Option<String> = None;
         for t in self.threads.drain(..) {
-            // Best-effort join: return first error if any.
-            if let Ok(Err(e)) = t.join() {
-                return Err(e);
+            match t.join() {
+                Ok(Err(e)) => {
+                    log::error!("[RecordingSession] Thread error on stop: {}", e);
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+                Err(_) => {
+                    log::error!("[RecordingSession] A capture thread panicked during stop.");
+                }
+                Ok(Ok(())) => {}
             }
+        }
+        if let Some(e) = first_err {
+            return Err(e);
         }
         let paused_ms = self
             .paused_accum_ms
@@ -282,9 +296,12 @@ fn system_capture_loop(
     }
     
     log::info!("[System Audio] Stopping capture");
-    ruhear
-        .stop()
-        .map_err(|e| format!("Failed to stop system audio capture: {e}"))?;
+    if let Err(e) = ruhear.stop() {
+        // ScreenCaptureKit may have already dropped the stream on its own (e.g. after ~30 min).
+        // Treat this as a warning rather than a hard error so the rest of the stop sequence
+        // can proceed normally.
+        log::warn!("[System Audio] Stop returned an error (stream may have already been dropped by the OS): {e}");
+    }
     Ok(())
 }
 
@@ -529,7 +546,12 @@ fn writer_loop(
             if sys_buf.len() > 192_000 { break; }
         }
 
-        // 2. Process in 10ms chunks
+        // 2. Process in 10ms chunks.
+        // If system audio has been silent for a while (e.g. ScreenCaptureKit dropped the stream),
+        // pad sys_buf with silence so the mic track continues to be written uninterrupted.
+        if mic_buf.len() >= chunk_size && sys_buf.len() < chunk_size {
+            sys_buf.resize(mic_buf.len().max(chunk_size), 0.0f32);
+        }
         while mic_buf.len() >= chunk_size && sys_buf.len() >= chunk_size {
             // Fill frames
             render_frame.copy_from_slice(&sys_buf[0..chunk_size]);
