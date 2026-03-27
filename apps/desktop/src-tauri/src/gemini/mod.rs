@@ -38,13 +38,13 @@ pub fn guess_audio_mime_type(path: &std::path::Path) -> String {
 }
 
 pub async fn summarize_audio_to_markdown(
+    client: &reqwest::Client,
     api_key: &str,
     audio_bytes: Vec<u8>,
     audio_mime: &str,
     prompt_text: &str,
     status_cb: &(dyn Fn(&str, &str) + Send + Sync),
 ) -> Result<String, String> {
-    let client = reqwest::Client::new();
 
     // 1. Upload file using Gemini File API
     status_cb("uploading", "Uploading audio");

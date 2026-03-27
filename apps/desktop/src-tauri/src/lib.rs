@@ -43,7 +43,6 @@ struct SummarizeStatusPayload {
     part_total: Option<usize>,
 }
 
-#[derive(Default)]
 struct AppState {
     recording: Mutex<Option<ActiveRecording>>,
     tray_icon: Mutex<Option<TrayIcon>>,
@@ -52,6 +51,47 @@ struct AppState {
     current_shortcut: Mutex<Option<Shortcut>>,
     current_shortcut_str: Mutex<String>,
     shortcuts_disabled: AtomicBool,
+    /// In-memory cache for settings.json — avoids a disk read on every IPC call.
+    settings_cache: Mutex<Option<storage::Settings>>,
+    /// Shared HTTP client (connection pool + TLS context reused across requests).
+    http_client: reqwest::Client,
+}
+
+impl AppState {
+    fn new() -> Self {
+        Self {
+            recording: Mutex::new(None),
+            tray_icon: Mutex::new(None),
+            tray_menu: Mutex::new(None),
+            is_recording: Arc::new(AtomicBool::new(false)),
+            current_shortcut: Mutex::new(None),
+            current_shortcut_str: Mutex::new(String::new()),
+            shortcuts_disabled: AtomicBool::new(false),
+            settings_cache: Mutex::new(None),
+            http_client: reqwest::Client::builder()
+                .use_rustls_tls()
+                .build()
+                .expect("Failed to build HTTP client"),
+        }
+    }
+}
+
+/// Read settings from the in-memory cache, falling back to disk on cache miss.
+fn get_settings_cached(state: &AppState, app: &tauri::AppHandle) -> Result<storage::Settings, String> {
+    let mut cache = state.settings_cache.lock();
+    if let Some(s) = cache.as_ref() {
+        return Ok(s.clone());
+    }
+    let s = storage::get_settings(app)?;
+    *cache = Some(s.clone());
+    Ok(s)
+}
+
+/// Write settings to disk and update the in-memory cache atomically.
+fn set_settings_cached(state: &AppState, app: &tauri::AppHandle, settings: storage::Settings) -> Result<(), String> {
+    storage::set_settings(app, settings.clone())?;
+    *state.settings_cache.lock() = Some(settings);
+    Ok(())
 }
 
 fn resolve_log_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -453,6 +493,7 @@ fn clear_gemini_api_key(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn summarize_recording(
     app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
     recording_id: String,
     prompt_id: String,
     note_id: Option<String>,
@@ -472,8 +513,8 @@ async fn summarize_recording(
     let prompt_text = if let Ok(text) = gemini::template_text(&prompt_id) {
         text.to_string()
     } else {
-        // Look in custom prompts
-        let settings = storage::get_settings(&app)?;
+        // Look in custom prompts (use cached settings to avoid disk read)
+        let settings = get_settings_cached(&state, &app)?;
         settings.custom_prompts.as_ref()
             .and_then(|prompts| prompts.iter().find(|p| p.id == prompt_id))
             .map(|p| p.content.clone())
@@ -504,10 +545,11 @@ async fn summarize_recording(
         };
 
         let result = gemini::summarize_audio_to_markdown(
-            &api_key, 
-            audio_bytes, 
-            &audio_mime, 
-            &prompt_text, 
+            &state.http_client,
+            &api_key,
+            audio_bytes,
+            &audio_mime,
+            &prompt_text,
             &status_cb,
         ).await?;
 
@@ -679,58 +721,67 @@ fn delete_recording_note(
 }
 
 #[tauri::command]
-fn list_custom_prompts(app: tauri::AppHandle) -> Result<Vec<storage::CustomPrompt>, String> {
-    let settings = storage::get_settings(&app)?;
+fn list_custom_prompts(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<storage::CustomPrompt>, String> {
+    let settings = get_settings_cached(&state, &app)?;
     Ok(settings.custom_prompts.unwrap_or_default())
 }
 
 #[tauri::command]
 fn create_custom_prompt(
     app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
     name: String,
     content: String,
 ) -> Result<storage::CustomPrompt, String> {
-    let mut settings = storage::get_settings(&app)?;
+    let mut settings = get_settings_cached(&state, &app)?;
     let id = uuid::Uuid::new_v4().to_string();
     let prompt = storage::CustomPrompt {
         id,
         name,
         content,
     };
-    
+
     let mut prompts = settings.custom_prompts.unwrap_or_default();
     prompts.push(prompt.clone());
     settings.custom_prompts = Some(prompts);
-    
-    storage::set_settings(&app, settings)?;
+
+    set_settings_cached(&state, &app, settings)?;
     Ok(prompt)
 }
 
 #[tauri::command]
 fn update_custom_prompt(
     app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
     id: String,
     name: String,
     content: String,
 ) -> Result<(), String> {
-    let mut settings = storage::get_settings(&app)?;
+    let mut settings = get_settings_cached(&state, &app)?;
     let prompts = settings.custom_prompts.as_mut().ok_or("No custom prompts found")?;
     let prompt = prompts.iter_mut().find(|p| p.id == id).ok_or("Prompt not found")?;
-    
+
     prompt.name = name;
     prompt.content = content;
-    
-    storage::set_settings(&app, settings)
+
+    set_settings_cached(&state, &app, settings)
 }
 
 #[tauri::command]
-fn delete_custom_prompt(app: tauri::AppHandle, id: String) -> Result<(), String> {
-    let mut settings = storage::get_settings(&app)?;
+fn delete_custom_prompt(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let mut settings = get_settings_cached(&state, &app)?;
     let mut prompts = settings.custom_prompts.unwrap_or_default();
     prompts.retain(|p| p.id != id);
     settings.custom_prompts = Some(prompts);
-    
-    storage::set_settings(&app, settings)
+
+    set_settings_cached(&state, &app, settings)
 }
 
 #[tauri::command]
@@ -917,7 +968,7 @@ pub fn run() {
 
             Ok(())
         })
-        .manage(AppState::default())
+        .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
             get_storage_dir,
