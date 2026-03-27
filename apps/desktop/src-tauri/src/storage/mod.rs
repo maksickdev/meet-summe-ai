@@ -35,14 +35,22 @@ pub struct AudioSet {
 pub struct RecordingMetadata {
     pub id: String,
     pub created_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<DateTime<Utc>>,
     pub title: Option<String>,
     #[serde(default)]
-    pub audio_parts: Vec<AudioSet>,               // Support for multiple parts
-    pub audio: Option<RecordingAudioInfo>,        // Microphone audio (primary) - Deprecated
-    pub system_audio: Option<RecordingAudioInfo>, // System audio (optional) - Deprecated
-    pub merged_audio: Option<RecordingAudioInfo>, // Merged audio (optional) - Deprecated
-    pub markdown_relative_path: Option<String>,   // Deprecated: used for single note mode
-    pub notes: Option<Vec<RecordingNote>>,        // Multiple notes
+    pub audio_parts: Vec<AudioSet>,
+    // Deprecated fields: kept with skip_serializing so they are readable from old
+    // recordings but no longer written on new ones.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<RecordingAudioInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_audio: Option<RecordingAudioInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merged_audio: Option<RecordingAudioInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub markdown_relative_path: Option<String>,
+    pub notes: Option<Vec<RecordingNote>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,12 +101,10 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
     let audio_relative_path = format!("recordings/{id}/mic.mp3");
     let system_audio_relative_path = format!("recordings/{id}/system.mp3");
     let merged_audio_relative_path = format!("recordings/{id}/merged.mp3");
-    let markdown_relative_path = Some(format!("recordings/{id}/notes.md"));
 
-    // We always create paths for system and merged tracks during recording 
-    // to allow backend to perform AEC and merging. 
-    // We will clean up files in do_stop_recording if mode is "merged".
-    
+    // We always create paths for system and merged tracks during recording
+    // to allow the backend to perform AEC and merging.
+    // We clean up files in do_stop_recording if mode is "merged".
     let mic_info = RecordingAudioInfo {
         relative_path: audio_relative_path,
         duration_ms: None,
@@ -124,18 +130,19 @@ pub fn create_new_recording(app: &tauri::AppHandle) -> Result<RecordingMetadata,
     let meta = RecordingMetadata {
         id: id.clone(),
         created_at,
+        started_at: Some(created_at),
         title: None,
         audio_parts: vec![AudioSet {
             id,
             created_at,
-            mic: mic_info.clone(),
-            system: system_info.clone(),
-            merged: merged_info.clone(),
+            mic: mic_info,
+            system: system_info,
+            merged: merged_info,
         }],
-        audio: Some(mic_info),
-        system_audio: system_info,
-        merged_audio: merged_info,
-        markdown_relative_path,
+        audio: None,
+        system_audio: None,
+        merged_audio: None,
+        markdown_relative_path: None,
         notes: Some(Vec::new()),
     };
 

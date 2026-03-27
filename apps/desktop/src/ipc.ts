@@ -2,10 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { RecordingMetadata, CustomPrompt } from "./types/recording";
 
-export async function greet(name: string): Promise<string> {
-  return await invoke<string>("greet", { name });
-}
-
 export async function getStorageDir(): Promise<string> {
   return await invoke<string>("get_storage_dir");
 }

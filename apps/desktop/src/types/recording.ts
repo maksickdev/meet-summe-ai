@@ -24,15 +24,16 @@ export type RecordingNote = {
 export type RecordingMetadata = {
   id: string;
   created_at: string;
+  started_at?: string | null;
   title: string | null;
   audio_parts: AudioSet[]; // Support for multiple parts
   notes?: RecordingNote[] | null;
 
-  // Deprecated fields for backward compatibility
+  // Deprecated fields kept for reading old recordings only
   audio?: RecordingAudioInfo;
   system_audio?: RecordingAudioInfo | null;
   merged_audio?: RecordingAudioInfo | null;
-  markdown_relative_path: string | null;
+  markdown_relative_path?: string | null;
 };
 
 export type CustomPrompt = {

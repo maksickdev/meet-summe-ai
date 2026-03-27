@@ -395,13 +395,6 @@ fn do_stop_recording(
         }
     }
 
-    // Keep deprecated fields in sync for now (using the first part's data)
-    if let Some(first) = meta.audio_parts.first() {
-        meta.audio = Some(first.mic.clone());
-        meta.system_audio = first.system.clone();
-        meta.merged_audio = first.merged.clone();
-    }
-
     storage::save_recording_metadata(app, &meta)?;
 
     // Always reset app state and notify the UI, even if the session stop had an error.
@@ -425,12 +418,6 @@ fn do_stop_recording(
 
     // Surface the session stop error after cleanup is complete.
     stop_result.map(|_| meta)
-}
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {name}! You've been greeted from Rust!")
 }
 
 #[tauri::command]
@@ -988,7 +975,6 @@ pub fn run() {
         })
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
-            greet,
             get_storage_dir,
             set_storage_dir,
             list_recordings,

@@ -183,8 +183,10 @@ export default function App() {
         setRecState("recording");
         setSelectedId(event.payload.id);
         setStatus("Recording started (external).");
-        // External start - we might not have exact sync but we can start counting
-        setStartTime(Date.now());
+        const ts = event.payload.started_at
+          ? new Date(event.payload.started_at).getTime()
+          : Date.now();
+        setStartTime(ts);
         setAccumulatedDuration(0);
       }),
       listen<RecordingMetadata>("recording-stopped", (event) => {
