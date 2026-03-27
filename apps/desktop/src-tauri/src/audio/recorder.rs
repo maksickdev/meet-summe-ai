@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use mp3lame_encoder::Bitrate;
 use ringbuf::traits::{Consumer, Producer, Split};
+use rubato::{Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction};
 
 use crate::audio::device;
 use crate::audio::writer::Mp3Writer;
@@ -53,7 +54,14 @@ impl RecordingSession {
             (48_000, 2u16, Bitrate::Kbps64)
         };
 
+        // Pre-open the mic device to determine the actual hardware sample rate.
+        // This lets the writer thread create the correct rubato resampler upfront.
+        let (mic_device, mic_config, mic_sample_format) =
+            open_mic_device(mic_device_name.clone(), sample_rate)?;
+        let stream_sample_rate = mic_config.sample_rate.0;
+
         // Buffer about ~5 seconds at 48kHz (max rate). Writer drains it continuously.
+        // The mic ring buffer holds native-rate samples; writer resamples to target.
         let rb_system = ringbuf::HeapRb::<f32>::new(240_000);
         let rb_mic = ringbuf::HeapRb::<f32>::new(240_000);
         let (prod_system, cons_system) = rb_system.split();
@@ -79,6 +87,7 @@ impl RecordingSession {
                     system_audio_path,
                     merged_audio_path,
                     sample_rate,
+                    stream_sample_rate,
                     channels,
                     bitrate,
                     cons_system,
@@ -101,12 +110,20 @@ impl RecordingSession {
         };
         threads.push(system_thread);
 
-        // Microphone capture via cpal
+        // Microphone capture via cpal (raw native-rate samples, no resampling here)
         let mic_thread = {
             let paused = Arc::clone(&paused);
             let stop = Arc::clone(&stop);
             std::thread::spawn(move || {
-                mic_capture_loop(prod_mic, mic_device_name, sample_rate, paused, stop)
+                mic_capture_loop(
+                    prod_mic,
+                    mic_device,
+                    mic_config,
+                    mic_sample_format,
+                    stream_sample_rate,
+                    paused,
+                    stop,
+                )
             })
         };
         threads.push(mic_thread);
@@ -235,13 +252,17 @@ fn system_capture_loop(
     let producer = Arc::new(Mutex::new(prod_system));
     let stop_cb = Arc::clone(&stop);
     let paused_cb = Arc::clone(&paused);
-    
+
     let detected_sample_rate = Arc::new(Mutex::new(None::<u32>));
     let detected_sample_rate_cb = Arc::clone(&detected_sample_rate);
-    
+
     // Resampler state
     let resampler = Arc::new(Mutex::new(NnResampler::new()));
-    
+
+    // Count ring-buffer overflows so we can surface them in the log.
+    let dropped = Arc::new(AtomicU64::new(0));
+    let dropped_cb = Arc::clone(&dropped);
+
     let callback = move |audio_buffers: RUBuffers| {
         if stop_cb.load(Ordering::SeqCst) || paused_cb.load(Ordering::SeqCst) {
             return;
@@ -249,15 +270,15 @@ fn system_capture_loop(
         if audio_buffers.is_empty() {
             return;
         }
-        
+
         let frames = audio_buffers[0].len();
-        
+
         // Detect sample rate on first callback
         let mut source_rate = 48000;
         if let Ok(mut guard) = detected_sample_rate_cb.lock() {
             if guard.is_none() {
                 // qruhear default assumption
-                *guard = Some(48000); 
+                *guard = Some(48000);
                 log::info!("[System Audio] Assuming source rate 48000 Hz");
             }
             source_rate = guard.unwrap_or(48000);
@@ -276,9 +297,11 @@ fn system_capture_loop(
             let v = sum / (audio_buffers.len() as f32);
 
             if res.should_emit(source_rate, target_sample_rate) {
-                 if let Ok(mut p) = producer.lock() {
-                     let _ = p.try_push(v);
-                 }
+                if let Ok(mut p) = producer.lock() {
+                    if p.try_push(v).is_err() {
+                        dropped_cb.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
             }
         }
     };
@@ -292,6 +315,10 @@ fn system_capture_loop(
     log::info!("[System Audio] Capture thread started");
 
     while !stop.load(Ordering::SeqCst) {
+        let n = dropped.swap(0, Ordering::Relaxed);
+        if n > 0 {
+            log::warn!("[System Audio] Ring buffer full: {} samples dropped", n);
+        }
         std::thread::sleep(Duration::from_millis(50));
     }
     
@@ -305,13 +332,12 @@ fn system_capture_loop(
     Ok(())
 }
 
-fn mic_capture_loop(
-    prod_mic: impl Producer<Item = f32> + Send + 'static,
+/// Open the mic device and determine its config before spawning any threads.
+/// Returns `(device, stream_config, sample_format)`.
+fn open_mic_device(
     mic_device_name: Option<String>,
-    target_sample_rate: u32,
-    paused: Arc<AtomicBool>,
-    stop: Arc<AtomicBool>,
-) -> Result<(), String> {
+    desired_rate: u32,
+) -> Result<(cpal::Device, cpal::StreamConfig, cpal::SampleFormat), String> {
     let host = cpal::default_host();
     let device = if let Some(name) = mic_device_name.as_deref() {
         device::find_input_device_by_name(name)?
@@ -319,14 +345,24 @@ fn mic_capture_loop(
         host.default_input_device()
             .ok_or_else(|| "No default input device available.".to_string())?
     };
+    let (config, format) = select_mic_config(&device, desired_rate)?;
+    Ok((device, config, format))
+}
 
-    let (config, sample_format) = select_mic_config(&device, target_sample_rate)?;
-    let stream_sample_rate = config.sample_rate.0;
+fn mic_capture_loop(
+    prod_mic: impl Producer<Item = f32> + Send + 'static,
+    device: cpal::Device,
+    config: cpal::StreamConfig,
+    sample_format: cpal::SampleFormat,
+    stream_sample_rate: u32,
+    paused: Arc<AtomicBool>,
+    stop: Arc<AtomicBool>,
+) -> Result<(), String> {
     let channels = config.channels as usize;
-    
+
     log::info!(
-        "[Microphone] Starting capture: {}Hz (target {}), {} channels, format: {:?}",
-        stream_sample_rate, target_sample_rate, channels, sample_format
+        "[Microphone] Starting capture: {}Hz, {} channels, format: {:?}",
+        stream_sample_rate, channels, sample_format
     );
 
     let prod = Arc::new(Mutex::new(prod_mic));
@@ -338,20 +374,20 @@ fn mic_capture_loop(
     let paused_i16 = Arc::clone(&paused);
     let stop_u16 = Arc::clone(&stop);
     let paused_u16 = Arc::clone(&paused);
-    
-    let resampler = Arc::new(Mutex::new(NnResampler::new()));
 
-    // Callback wrapper to handle resampling if needed
+    // Drop counter for ring-buffer overflow detection.
+    let dropped = Arc::new(AtomicU64::new(0));
+    let dropped_cb = Arc::clone(&dropped);
+
+    // Push raw native-rate samples directly — resampling happens in writer_loop.
     let mut handle_sample = {
         let prod = Arc::clone(&prod);
-        let resampler = Arc::clone(&resampler);
         move |s: f32| {
-             let mut res = resampler.lock().unwrap();
-             if res.should_emit(stream_sample_rate, target_sample_rate) {
-                 if let Ok(mut p) = prod.lock() {
-                    let _ = p.try_push(s);
-                 }
-             }
+            if let Ok(mut p) = prod.lock() {
+                if p.try_push(s).is_err() {
+                    dropped_cb.fetch_add(1, Ordering::Relaxed);
+                }
+            }
         }
     };
 
@@ -391,9 +427,13 @@ fn mic_capture_loop(
     log::info!("[Microphone] Capture stream started");
 
     while !stop.load(Ordering::SeqCst) {
+        let n = dropped.swap(0, Ordering::Relaxed);
+        if n > 0 {
+            log::warn!("[Microphone] Ring buffer full: {} samples dropped", n);
+        }
         std::thread::sleep(Duration::from_millis(50));
     }
-    
+
     log::info!("[Microphone] Stopping capture");
     drop(stream);
     Ok(())
@@ -466,6 +506,7 @@ fn writer_loop(
     sys_path: Option<PathBuf>,
     merged_path: Option<PathBuf>,
     sample_rate: u32,
+    stream_sample_rate: u32,
     channels: u16,
     bitrate: Bitrate,
     mut cons_system: impl Consumer<Item = f32>,
@@ -496,12 +537,42 @@ fn writer_loop(
     }
 
     let mut total_frames = 0u64;
-    // Buffers to hold incoming samples until we have enough to sync
+    // mic_buf holds samples already at target_sample_rate (after rubato conversion).
+    // raw_mic_buf holds native-rate samples drained from the ring buffer.
     let mut mic_buf = Vec::with_capacity(4096);
+    let mut raw_mic_buf = Vec::with_capacity(4096);
     let mut sys_buf = Vec::with_capacity(4096);
 
     // 10ms chunk size for WebRTC processing
     let chunk_size = (sample_rate / 100) as usize;
+
+    // Sinc resampler for the microphone track.
+    // When the hardware rate already matches the target we skip rubato entirely.
+    let need_resample = stream_sample_rate != sample_rate;
+    let mut mic_resampler = if need_resample {
+        log::info!(
+            "[Writer] Mic resampler: {}Hz -> {}Hz (sinc)",
+            stream_sample_rate, sample_rate
+        );
+        Some(
+            SincFixedIn::<f32>::new(
+                sample_rate as f64 / stream_sample_rate as f64,
+                2.0,
+                SincInterpolationParameters {
+                    sinc_len: 256,
+                    f_cutoff: 0.95,
+                    interpolation: SincInterpolationType::Linear,
+                    oversampling_factor: 256,
+                    window: WindowFunction::BlackmanHarris2,
+                },
+                chunk_size,
+                1,
+            )
+            .map_err(|e| format!("Failed to create mic resampler: {:?}", e))?,
+        )
+    } else {
+        None
+    };
     let mut processor = Processor::new(&InitializationConfig {
         num_capture_channels: 1,
         num_render_channels: 1,
@@ -536,14 +607,31 @@ fn writer_loop(
             continue;
         }
 
-        // 1. Drain ringbuffers into local vectors
+        // 1. Drain ringbuffers into local vectors.
+        // Mic samples are at stream_sample_rate (native hardware rate).
         while let Some(s) = cons_mic.try_pop() {
-            mic_buf.push(s);
-            if mic_buf.len() > 192_000 { break; } 
+            raw_mic_buf.push(s);
+            if raw_mic_buf.len() > 192_000 { break; }
         }
         while let Some(s) = cons_system.try_pop() {
             sys_buf.push(s);
             if sys_buf.len() > 192_000 { break; }
+        }
+
+        // 1b. Resample mic to target_sample_rate using rubato sinc resampler.
+        if let Some(ref mut res) = mic_resampler {
+            while raw_mic_buf.len() >= res.input_frames_next() {
+                let n = res.input_frames_next();
+                let input = [raw_mic_buf[..n].to_vec()];
+                match res.process(&input, None) {
+                    Ok(out) => mic_buf.extend_from_slice(&out[0]),
+                    Err(e) => log::warn!("[Writer] Rubato error: {:?}", e),
+                }
+                raw_mic_buf.drain(..n);
+            }
+        } else {
+            // Rates match — move raw samples directly.
+            mic_buf.append(&mut raw_mic_buf);
         }
 
         // 2. Process in 10ms chunks.
@@ -608,6 +696,21 @@ fn writer_loop(
         "[Writer] Finished: {} total frames written",
         total_frames
     );
+
+    // Drain any remaining raw mic samples through the resampler before flushing.
+    if !raw_mic_buf.is_empty() {
+        if let Some(ref mut res) = mic_resampler {
+            let padded_len = res.input_frames_next().max(raw_mic_buf.len());
+            raw_mic_buf.resize(padded_len, 0.0f32);
+            let n = res.input_frames_next();
+            let input = [raw_mic_buf[..n].to_vec()];
+            if let Ok(out) = res.process(&input, None) {
+                mic_buf.extend_from_slice(&out[0]);
+            }
+        } else {
+            mic_buf.append(&mut raw_mic_buf);
+        }
+    }
 
     // Flush any remaining tail samples (up to chunk_size - 1 samples may be left
     // in the buffers after the main loop exits). Pad with silence and run one
