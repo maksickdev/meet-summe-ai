@@ -609,6 +609,32 @@ fn writer_loop(
         total_frames
     );
 
+    // Flush any remaining tail samples (up to chunk_size - 1 samples may be left
+    // in the buffers after the main loop exits). Pad with silence and run one
+    // final AEC pass so no audio is lost at the end of the recording.
+    if !mic_buf.is_empty() && !paused.load(Ordering::SeqCst) {
+        log::info!("[Writer] Flushing {} tail samples", mic_buf.len());
+        mic_buf.resize(chunk_size, 0.0f32);
+        sys_buf.resize(chunk_size, 0.0f32);
+        render_frame.copy_from_slice(&sys_buf[0..chunk_size]);
+        capture_frame.copy_from_slice(&mic_buf[0..chunk_size]);
+        let _ = processor.process_render_frame(&mut render_frame);
+        let _ = processor.process_capture_frame(&mut capture_frame);
+        let mic_gain = 2.5f32;
+        let sys_gain = 0.8f32;
+        for i in 0..chunk_size {
+            let m = (capture_frame[i] * mic_gain).clamp(-1.0, 1.0);
+            mic_writer.write_frame(m, m)?;
+            if let Some(w) = &mut sys_writer {
+                w.write_frame(sys_buf[i], sys_buf[i])?;
+            }
+            if let Some(w) = &mut merged_writer {
+                let mixed = (m + sys_buf[i] * sys_gain).clamp(-1.0, 1.0);
+                w.write_frame(mixed, mixed)?;
+            }
+        }
+    }
+
     if paused.load(Ordering::SeqCst) {
         if let Ok(mut pause_start) = pause_started_at.lock() {
             if let Some(t0) = pause_start.take() {

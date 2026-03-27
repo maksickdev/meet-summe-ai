@@ -116,7 +116,8 @@ export default function App() {
 
   const selectedAbsAudioPath = useMemo(() => {
     if (!selected || selected.audio_parts.length === 0) return "";
-    return joinPaths(storageDir, selected.audio_parts[0].mic.relative_path);
+    // Use the last part — most recently recorded segment
+    return joinPaths(storageDir, selected.audio_parts[selected.audio_parts.length - 1].mic.relative_path);
   }, [selected, storageDir]);
 
   // --- Effects ---
@@ -349,15 +350,16 @@ export default function App() {
   async function onStop() {
     try {
       const meta = await stopRecording();
-      setRecState("idle");
-      await refreshRecordings();
       setSelectedId(meta.id);
       setStatus("Recording saved.");
-      setStartTime(null);
-      setAccumulatedDuration(0);
     } catch (e) {
       console.error(e);
       setStatus(`Stop error: ${String(e)}`);
+    } finally {
+      setRecState("idle");
+      setStartTime(null);
+      setAccumulatedDuration(0);
+      await refreshRecordings();
     }
   }
 
