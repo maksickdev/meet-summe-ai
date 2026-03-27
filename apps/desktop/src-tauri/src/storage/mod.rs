@@ -56,6 +56,7 @@ pub struct CustomPrompt {
 pub struct Settings {
     pub storage_dir: Option<String>,
     pub gemini_api_key: Option<String>,
+    pub gemini_model: Option<String>,   // e.g. "gemini-3-flash-preview"
     pub recording_mode: Option<String>, // "merged" | "separated"
     pub preferred_mic_name: Option<String>,
     pub recording_quality: Option<String>,
@@ -479,4 +480,9 @@ pub fn clear_gemini_api_key(app: &tauri::AppHandle) -> Result<(), String> {
     let mut settings = get_settings(app)?;
     settings.gemini_api_key = None;
     set_settings(app, settings)
+}
+
+pub fn get_gemini_model(app: &tauri::AppHandle) -> Result<String, String> {
+    let settings = get_settings(app)?;
+    Ok(settings.gemini_model.unwrap_or_else(|| "gemini-3-flash-preview".to_string()))
 }

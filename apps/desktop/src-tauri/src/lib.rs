@@ -544,12 +544,14 @@ async fn summarize_recording(
             emit_summarize_status(&app, stage, message, Some(part_index), Some(part_total));
         };
 
+        let model = storage::get_gemini_model(&app).unwrap_or_else(|_| "gemini-3-flash-preview".to_string());
         let result = gemini::summarize_audio_to_markdown(
             &state.http_client,
             &api_key,
             audio_bytes,
             &audio_mime,
             &prompt_text,
+            &model,
             &status_cb,
         ).await?;
 
@@ -785,6 +787,22 @@ fn delete_custom_prompt(
 }
 
 #[tauri::command]
+fn get_gemini_model(app: tauri::AppHandle) -> Result<String, String> {
+    storage::get_gemini_model(&app)
+}
+
+#[tauri::command]
+fn set_gemini_model(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    model: String,
+) -> Result<(), String> {
+    let mut settings = get_settings_cached(&state, &app)?;
+    settings.gemini_model = Some(model);
+    set_settings_cached(&state, &app, settings)
+}
+
+#[tauri::command]
 fn get_recording_mode(app: tauri::AppHandle) -> Result<String, String> {
     storage::get_recording_mode(&app)
 }
@@ -979,6 +997,8 @@ pub fn run() {
             get_gemini_api_key,
             set_gemini_api_key,
             clear_gemini_api_key,
+            get_gemini_model,
+            set_gemini_model,
             summarize_recording,
             delete_recording,
             rename_recording,

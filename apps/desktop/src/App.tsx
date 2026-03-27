@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import {
   clearGeminiApiKey,
   getGeminiApiKey,
+  getGeminiModel,
+  setGeminiModel,
   getRecordingMode,
   getPreferredMic,
   getStorageDir,
@@ -95,6 +97,7 @@ export default function App() {
   const [recordingQuality, setRecordingQualityState] = useState<string>("quality");
   const [hotkey, setHotkeyState] = useState<string>("");
   const [hotkeyDraft, setHotkeyDraft] = useState<string>("");
+  const [geminiModel, setGeminiModelState] = useState<string>("gemini-3-flash-preview");
   const [customPrompts, setCustomPrompts] = useState<CustomPrompt[]>([]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -141,8 +144,9 @@ export default function App() {
       getRecordingQuality(),
       getRecordingHotkey(),
       listCustomPrompts(),
+      getGeminiModel(),
     ])
-      .then(async ([dir, recs, devs, keyPresent, mode, prefMic, quality, hk, prompts]) => {
+      .then(async ([dir, recs, devs, keyPresent, mode, prefMic, quality, hk, prompts, model]) => {
         setStorageDirState(dir);
         setStorageDirDraft(dir);
         setRecordings(recs);
@@ -153,6 +157,7 @@ export default function App() {
         setHotkeyState(hk);
         setHotkeyDraft(hk);
         setCustomPrompts(prompts);
+        setGeminiModelState(model);
         if (prefMic) {
           setMicDevice(prefMic);
         }
@@ -218,6 +223,16 @@ export default function App() {
     } catch (e) {
       console.error(e);
       setStatus(`Error saving recording mode: ${String(e)}`);
+    }
+  }
+
+  async function onChangeGeminiModel(model: string) {
+    setGeminiModelState(model);
+    try {
+      await setGeminiModel(model);
+    } catch (e) {
+      console.error(e);
+      setStatus(`Error saving Gemini model: ${String(e)}`);
     }
   }
 
@@ -569,6 +584,8 @@ export default function App() {
         onApiKeyChange={setApiKey}
         onSaveApiKey={onSaveApiKey}
         onClearApiKey={onClearApiKey}
+        geminiModel={geminiModel}
+        onChangeGeminiModel={onChangeGeminiModel}
 
         recordingQuality={recordingQuality}
         onChangeQuality={onChangeQuality}

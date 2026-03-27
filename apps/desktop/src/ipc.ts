@@ -50,6 +50,14 @@ export async function clearGeminiApiKey(): Promise<void> {
   await invoke<void>("clear_gemini_api_key");
 }
 
+export async function getGeminiModel(): Promise<string> {
+  return await invoke<string>("get_gemini_model");
+}
+
+export async function setGeminiModel(model: string): Promise<void> {
+  await invoke<void>("set_gemini_model", { model });
+}
+
 export async function startRecording(
   micDeviceName: string | null,
   existingId?: string | null,

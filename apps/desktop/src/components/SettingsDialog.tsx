@@ -36,6 +36,8 @@ interface SettingsDialogProps {
   onApiKeyChange: (val: string) => void;
   onSaveApiKey: () => void;
   onClearApiKey: () => void;
+  geminiModel: string;
+  onChangeGeminiModel: (val: string) => void;
 
   recordingQuality: string;
   onChangeQuality: (val: string) => void;
@@ -69,6 +71,8 @@ export function SettingsDialog({
   onApiKeyChange,
   onSaveApiKey,
   onClearApiKey,
+  geminiModel,
+  onChangeGeminiModel,
   recordingQuality,
   onChangeQuality,
   hotkey,
@@ -188,6 +192,14 @@ export function SettingsDialog({
                 Remove API Key
               </Button>
             )}
+            <div className="space-y-1.5">
+              <label className="text-xs text-zinc-500 dark:text-zinc-400">Model</label>
+              <Select value={geminiModel} onChange={(e) => onChangeGeminiModel(e.target.value)}>
+                <option value="gemini-3-flash-preview">gemini-3-flash-preview (default)</option>
+                <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview</option>
+                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+              </Select>
+            </div>
           </div>
 
           <Separator />
